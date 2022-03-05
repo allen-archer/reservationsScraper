@@ -6,8 +6,6 @@ import com.gargoylesoftware.htmlunit.html.*;
 import org.apache.commons.lang3.StringUtils;
 import org.chunkystyles.bookitnow.scraper.configuration.Secrets;
 import org.chunkystyles.bookitnow.scraper.model.RoomStay;
-import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
