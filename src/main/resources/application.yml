@@ -1,1 +1,3 @@
-
+scraper:
+  cron:
+    expression: 0 30 6 ? * * *           # I want this to run every morning at 6:30
