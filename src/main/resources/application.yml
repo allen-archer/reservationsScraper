@@ -1,3 +1,13 @@
+server:
+  servlet:
+    context-path: /scraper
+  port: 7443
+spring:
+  batch:
+    job:
+      enabled: false #Stops the job from running on startup if false
 scraper:
   cron:
-    expression: 0 30 6 ? * * *           # I want this to run every morning at 6:30
+    expression: 0 30 6 ? * * # I want this to run every morning at 6:30
+    timezone:  # Blank string gives device's default timezone
+  numberOfDays: 3 # Number of days to run report on, 3 means today, tomorrow, and the next day

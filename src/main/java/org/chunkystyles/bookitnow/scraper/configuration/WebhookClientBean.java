@@ -8,9 +8,9 @@ import org.springframework.context.annotation.Primary;
 @Configuration
 public class WebhookClientBean {
 
-    @Bean
-    @Primary
-    public WebhookClient primary(Secrets secrets){
-        return WebhookClient.withUrl(secrets.getWebhookUrl());
-    }
+  @Bean
+  @Primary
+  public WebhookClient primary(Secrets secrets) {
+    return WebhookClient.withUrl(secrets.webhookUrl());
+  }
 }

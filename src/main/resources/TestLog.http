@@ -1,0 +1,2 @@
+GET http://localhost:7443/scraper/testlog
+Content-Type: application/json
