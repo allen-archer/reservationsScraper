@@ -1,2 +1,0 @@
-GET http://localhost:7443/scraper/scrape?confirmationCode=999999
-Content-Type: application/json

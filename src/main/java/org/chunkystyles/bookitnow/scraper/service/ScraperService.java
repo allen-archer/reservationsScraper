@@ -22,20 +22,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 @Configuration
 public class ScraperService {
   private static final Logger logger = LogManager.getLogger();
+  private final MqttService mqttService;
   private final Secrets secrets;
   private final WebhookClient webhookClient;
   private final Map<String, String> roomNumbersToNamesMap;
   private final int numberOfDaysToRun;
 
   public ScraperService(
+      MqttService mqttService,
       Secrets secrets,
       WebhookClient webhookClient,
       @Value("${scraper.numberOfDays}") int numberOfDaysToRun) {
+    this.mqttService = mqttService;
     this.secrets = secrets;
     this.webhookClient = webhookClient;
     this.roomNumbersToNamesMap = parseRoomNumbersToNamesString(secrets.roomNumbersToNamesString());
@@ -262,6 +266,7 @@ public class ScraperService {
     }
     StringBuilder stringBuilder = new StringBuilder();
     Map<String, List<RoomStay>> newMap = cleanUpStaysAndCombine(staysMap);
+    mqttService.updateState(anyStaysToday(staysMap));
     for (int i = 0; i < numberOfDaysToRun; i++) {
       LocalDate thisDay = LocalDate.now().plusDays(i);
       List<String> checkins = new ArrayList<>();
@@ -285,5 +290,16 @@ public class ScraperService {
     String message = stringBuilder.toString();
     logger.info(message);
     webhookClient.send(message);
+  }
+
+  private boolean anyStaysToday(Map<String, List<RoomStay>> staysMap){
+    return staysMap.entrySet().stream()
+            .flatMap(stringListEntry -> stringListEntry.getValue().stream())
+            .anyMatch(this::staySpansToday);
+  }
+
+  private boolean staySpansToday(RoomStay roomStay){
+    LocalDate thisDay = LocalDate.now();
+    return roomStay.getCheckin().compareTo(thisDay) <= 0 && roomStay.getCheckout().compareTo(thisDay) >= 0;
   }
 }

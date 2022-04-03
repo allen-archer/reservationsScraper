@@ -10,9 +10,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ScraperController {
   private final Logger logger = LogManager.getLogger();
   private final ScraperService scraperService;
+  private final MqttService mqttService;
 
-  public ScraperController(ScraperService scraperService) {
+  public ScraperController(ScraperService scraperService, MqttService mqttService) {
     this.scraperService = scraperService;
+    this.mqttService = mqttService;
   }
 
   @GetMapping("/scrape")
@@ -31,5 +33,11 @@ public class ScraperController {
   @GetMapping("/test")
   public String test(){
     return "It works!";
+  }
+
+  @GetMapping("/mqtt")
+  public String mqtt(@RequestParam String topic, @RequestParam String message){
+    mqttService.sendMessage("homeassistant/switch/bookitnow/" + topic, message);
+    return "OK";
   }
 }
