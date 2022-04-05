@@ -23,7 +23,7 @@ public class BatchScheduler {
     this.job = job;
   }
 
-  @Scheduled(cron = "${scraper.cron.expression}", zone = "${scraper.cron.timezone}")
+  @Scheduled(cron = "#{@argumentsValues.getCronExpression()}", zone = "#{@argumentsValues.getTimezone()}")
   public void testBatch() {
     JobParameters jobParameters =
         new JobParametersBuilder().addLong("time", System.currentTimeMillis()).toJobParameters();

@@ -2,6 +2,7 @@ package org.chunkystyles.bookitnow.scraper.service;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.chunkystyles.bookitnow.scraper.configuration.ArgumentsValues;
 import org.eclipse.paho.client.mqttv3.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -17,16 +18,17 @@ public class MqttService {
   private static final String registerMessage = """
           {
             "name": "Guests Today",
+            "unique_id": "guests_today_01",
             "command_topic": "homeassistant/switch/bookitnow/set",
             "state_topic": "homeassistant/switch/bookitnow/state",
             "state_on": "ON",
             "state_off": "OFF",
             "device": {
-              "via_device": "bookitnow",
               "model": "1.0.0",
               "identifiers": "bookitnow",
               "name": "Book-it-now",
-              "manufacturer": "Allen Archer"
+              "manufacturer": "Allen Archer",
+              "via_device": "bookitnow"
             },
             "availability": [
               {
@@ -40,9 +42,9 @@ public class MqttService {
   private static final String availabilityTopic = "homeassistant/switch/bookitnow/available";
   private static final String stateTopic = "homeassistant/switch/bookitnow/state";
 
-  public MqttService(@Value("${mqtt.broker.address}") String mqttAddress, @Value("${mqtt.broker.port}") String mqttPort) {
+  public MqttService(ArgumentsValues argumentsValues) {
     try {
-      client = new MqttClient(mqttAddress + ":" + mqttPort, UUID.randomUUID().toString());
+      client = new MqttClient("tcp://" + argumentsValues.getMqttBrokerAddress() + ":" + argumentsValues.getMqttBrokerPort(), UUID.randomUUID().toString());
       MqttConnectOptions options = new MqttConnectOptions();
       options.setAutomaticReconnect(true);
       options.setCleanSession(true);

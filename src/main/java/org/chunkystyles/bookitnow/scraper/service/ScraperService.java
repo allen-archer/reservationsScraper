@@ -7,6 +7,7 @@ import io.micrometer.core.lang.Nullable;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.chunkystyles.bookitnow.scraper.configuration.ArgumentsValues;
 import org.chunkystyles.bookitnow.scraper.configuration.Secrets;
 import org.chunkystyles.bookitnow.scraper.model.RoomStay;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,12 +39,12 @@ public class ScraperService {
       MqttService mqttService,
       Secrets secrets,
       WebhookClient webhookClient,
-      @Value("${scraper.numberOfDays}") int numberOfDaysToRun) {
+      ArgumentsValues argumentsValues) {
     this.mqttService = mqttService;
     this.secrets = secrets;
     this.webhookClient = webhookClient;
     this.roomNumbersToNamesMap = parseRoomNumbersToNamesString(secrets.roomNumbersToNamesString());
-    this.numberOfDaysToRun = numberOfDaysToRun;
+    this.numberOfDaysToRun = argumentsValues.getNumberOfDays();
   }
 
   private static Map<String, String> parseRoomNumbersToNamesString(

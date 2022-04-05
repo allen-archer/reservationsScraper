@@ -5,13 +5,13 @@ server:
 spring:
   batch:
     job:
-      enabled: false #Stops the job from running on startup if false
+      enabled: false # Stops the job from running on startup if false
 scraper:
   cron:
-    expression: 0 30 6 ? * * # I want this to run every morning at 6:30
-    timezone:  # Blank string gives device's default timezone
-  numberOfDays: 3 # Number of days to run report on, 3 means today, tomorrow, and the next day
+    expression: 0 30 6 ? * * # Defaults to every morning at 6:30 am, set via --cronexpression
+    timezone: America/New_York # Default timezone, set via --timezone
+  numberOfDays: 3 # Number of days to run report on, 3 means today, tomorrow, and the next day, set via --numberofdays
 mqtt:
   broker:
-    address: tcp://192.168.1.121
-    port: 1883
+    address: 127.0.0.1 # Set via --mqttaddress
+    port: 1883 # Set via --mqttport
