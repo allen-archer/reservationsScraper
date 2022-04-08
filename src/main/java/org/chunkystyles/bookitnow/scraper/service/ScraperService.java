@@ -10,7 +10,6 @@ import org.apache.logging.log4j.Logger;
 import org.chunkystyles.bookitnow.scraper.configuration.ArgumentsValues;
 import org.chunkystyles.bookitnow.scraper.configuration.Secrets;
 import org.chunkystyles.bookitnow.scraper.model.RoomStay;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
@@ -23,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 @Service
 @Configuration
@@ -155,9 +153,8 @@ public class ScraperService {
         && StringUtils.equalsIgnoreCase(first.getGuestName(), second.getGuestName());
   }
 
-  private static RoomStay mergeStay(RoomStay first, RoomStay second) {
+  private static void mergeStay(RoomStay first, RoomStay second) {
     first.setCheckout(second.getCheckout());
-    return first;
   }
 
   private static Map<String, List<RoomStay>> cleanUpStaysAndCombine(
@@ -267,7 +264,8 @@ public class ScraperService {
     }
     StringBuilder stringBuilder = new StringBuilder();
     Map<String, List<RoomStay>> newMap = cleanUpStaysAndCombine(staysMap);
-    mqttService.updateState(anyStaysToday(staysMap));
+    mqttService.updateState(anyGuestsThisEvening(staysMap), "eveningGuests");
+    mqttService.updateState(anyGuestsForBreakfast(staysMap), "breakfastGuests");
     for (int i = 0; i < numberOfDaysToRun; i++) {
       LocalDate thisDay = LocalDate.now().plusDays(i);
       List<String> checkins = new ArrayList<>();
@@ -293,14 +291,25 @@ public class ScraperService {
     webhookClient.send(message);
   }
 
-  private boolean anyStaysToday(Map<String, List<RoomStay>> staysMap){
+  private boolean anyGuestsThisEvening(Map<String, List<RoomStay>> staysMap){
+    LocalDate today = LocalDate.now();
     return staysMap.entrySet().stream()
             .flatMap(stringListEntry -> stringListEntry.getValue().stream())
-            .anyMatch(this::staySpansToday);
+            .anyMatch(r -> isStayForTonight(r, today));
   }
 
-  private boolean staySpansToday(RoomStay roomStay){
-    LocalDate thisDay = LocalDate.now();
-    return roomStay.getCheckin().compareTo(thisDay) <= 0 && roomStay.getCheckout().compareTo(thisDay) >= 0;
+  private boolean isStayForTonight(RoomStay roomStay, LocalDate today){
+    return roomStay.getCheckin().compareTo(today) <= 0 && roomStay.getCheckout().compareTo(today) >= 0;
+  }
+
+  private boolean anyGuestsForBreakfast(Map<String, List<RoomStay>> staysMap){
+    LocalDate today = LocalDate.now();
+    return staysMap.entrySet().stream()
+            .flatMap(stringListEntry -> stringListEntry.getValue().stream())
+            .anyMatch(r -> isStayForBreakfast(r, today));
+  }
+
+  private boolean isStayForBreakfast(RoomStay roomStay, LocalDate today){
+    return roomStay.getCheckin().compareTo(today) < 0 && roomStay.getCheckout().compareTo(today) >= 0;
   }
 }

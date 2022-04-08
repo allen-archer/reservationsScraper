@@ -37,7 +37,7 @@ public class ScraperController {
 
   @GetMapping("/mqtt")
   public String mqtt(@RequestParam String topic, @RequestParam String message){
-    mqttService.sendMessage("homeassistant/switch/bookitnow/" + topic, message);
+    mqttService.sendMessage(topic.replaceAll("-", "/"), message);
     return "OK";
   }
 }
