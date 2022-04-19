@@ -1,9 +1,11 @@
 const puppeteer = require('puppeteer')
 
-const loginUrl = ''
-const userName = ''
-const password = ''
-const confirmationCode = ''
+const secrets = require('./secrets.json')
+
+const loginUrl = secrets.loginUrl
+const userName = secrets.userName
+const password = secrets.password
+const confirmationCode = secrets.confirmationCode
 const dateRegex = 'data-ajax="(.*?):'
 const dataDaysRegex = 'data-days="(.*?)"'
 const amountRegex = '(\\$\\d{0,3},{0,1}\\d{1,3}\\.\\d{2})'
