@@ -1,3 +1,5 @@
 {
-  "daysToCheck": 3
+  "daysToCheck": 3,
+  "timezone": "America/New_York",
+  "timeout": 5000
 }

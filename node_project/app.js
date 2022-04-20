@@ -1,5 +1,7 @@
 const puppeteer = require('puppeteer')
+const cron = require('node-cron')
 const { Webhook } = require('discord-webhook-node')
+const { createLogger, format, transports } = require('winston');
 const mqttService = require('./mqttService')
 
 const secrets = require('./secrets.json')
@@ -20,6 +22,17 @@ const noteDateRegex = '\\d{2}\\/\\d{2}\\/\\d{4} \\d{2}:\\d{2}: '
 const orderIdRegex = ' id="(.*?)"'
 const roomNumberRegex = '.*_(\\d{3,4})'
 
+const logger = createLogger({
+    format: format.combine(
+        format.timestamp(),
+        format.json(),
+        format.prettyPrint()
+    ),
+    transports: [new transports.File({ filename: "app.log" })],
+    exceptionHandlers: [new transports.File({ filename: "app.log" })],
+    rejectionHandlers: [new transports.File({ filename: "app.log" })],
+})
+
 const main = async () => {
     const webhook = new Webhook(webhookUrl)
     const browser = await puppeteer.launch({timeout: 5000})
@@ -29,14 +42,14 @@ const main = async () => {
     await page.type('#edit-pass', password)
     await page.screenshot({ path: 'login.png' })
     await page.click('#edit-submit')
-    await page.waitForNavigation()
+    await page.waitForNavigation({timeout: config.timeout})
     let confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || "";
     if (confirmationCodeRequired !== ""){
         await page.type('#edit-confirmation-code', confirmationCode)
         await page.type('#edit-new-password', password)
         await page.screenshot({ path: 'confirmation.png' })
         await page.click('#edit-submit')
-        await page.waitForNavigation()
+        await page.waitForNavigation({timeout: config.timeout})
     }
     await page.screenshot({ path: 'calendar.png' })
     let calendarDays = Array.from(await page.$$('.calendar-day'))
@@ -81,6 +94,7 @@ const main = async () => {
     await mqttService.changeDeviceState("Breakfast Guests", breakfastGuests)
     let message = await createMessage(today, finalStays, config.daysToCheck)
     await webhook.send(message)
+    logger.info(message)
     await browser.close()
 }
 
@@ -213,6 +227,10 @@ async function combineStays(roomStays){
                 while (j < entry.length && await isSameStay(thisStay, entry[j])){
                     thisStay.checkout = entry[j].checkout
                     thisStay.nights += entry[j].nights
+                    let thisAmount = parseFloat(thisStay.amount.replace('\$', ''))
+                    let entryAmount = parseFloat(entry[j].amount.replace('\$', ''))
+                    let newAmount = thisAmount + entryAmount
+                    thisStay.amount = '$' + newAmount.toFixed(2)
                     indexOfLastMerged = j
                 }
                 if (indexOfLastMerged > i){
@@ -259,7 +277,7 @@ async function getMessageForDay(day, roomsStays){
     } else {
         for (let roomStay of checkouts){
             message
-                += '\n   ' + roomStay.name
+                += '\n    ' + roomStay.name
                 + '\n      ' + 'Name: ' + roomStay.name
                 + '\n      ' + 'Due: ' + roomStay.amount
         }
@@ -267,8 +285,14 @@ async function getMessageForDay(day, roomsStays){
     return message
 }
 
-async function getDayOfWeek(date){
-    return date.toLocaleString("en", { weekday: "long", timeZone: 'America/New_York' })
+async function getDayOfWeek(date) {
+    return date.toLocaleString("en", {weekday: "long", timeZone: config.timezone})
 }
 
-main()
+cron.schedule('* * * * *', () => {
+    logger.info('Starting run')
+    main()
+}, {
+    scheduled: true,
+    timezone: config.timezone
+})
