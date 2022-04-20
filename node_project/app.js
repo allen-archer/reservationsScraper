@@ -227,10 +227,7 @@ async function combineStays(roomStays){
                 while (j < entry.length && await isSameStay(thisStay, entry[j])){
                     thisStay.checkout = entry[j].checkout
                     thisStay.nights += entry[j].nights
-                    let thisAmount = parseFloat(thisStay.amount.replace('\$', ''))
-                    let entryAmount = parseFloat(entry[j].amount.replace('\$', ''))
-                    let newAmount = thisAmount + entryAmount
-                    thisStay.amount = '$' + newAmount.toFixed(2)
+                    thisStay.amount += ', ' + entry[j].amount
                     indexOfLastMerged = j
                 }
                 if (indexOfLastMerged > i){
