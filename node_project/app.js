@@ -1,11 +1,15 @@
 const puppeteer = require('puppeteer')
+const { Webhook } = require('discord-webhook-node')
 
 const secrets = require('./secrets.json')
+const config = require('./config.json')
 
 const loginUrl = secrets.loginUrl
 const userName = secrets.userName
 const password = secrets.password
 const confirmationCode = secrets.confirmationCode
+const roomNameMap = secrets.roomNameMap
+const webhookUrl = secrets.webhookUrl
 const dateRegex = 'data-ajax="(.*?):'
 const dataDaysRegex = 'data-days="(.*?)"'
 const amountRegex = '(\\$\\d{0,3},{0,1}\\d{1,3}\\.\\d{2})'
@@ -16,6 +20,7 @@ const orderIdRegex = ' id="(.*?)"'
 const roomNumberRegex = '.*_(\\d{3,4})'
 
 const main = async () => {
+    const webhook = new Webhook(webhookUrl)
     const browser = await puppeteer.launch({timeout: 5000})
     const page = await browser.newPage()
     await page.goto(loginUrl)
@@ -34,6 +39,7 @@ const main = async () => {
     }
     await page.screenshot({ path: 'calendar.png' })
     let calendarDays = Array.from(await page.$$('.calendar-day'))
+    let roomStays = []
     for (let i = 0; i < calendarDays.length; i++) {
         let day = calendarDays[i]
         let inner = await getInnerHtml(page, day)
@@ -50,6 +56,7 @@ const main = async () => {
             let note = (await safeMatch(innerHtml, noteRegex))[0][1]
             let orderId = (await safeMatch(outerHtml, orderIdRegex))[0][1]
             let roomNumber = (await safeMatch(map.get(orderId), roomNumberRegex))[0][1]
+            let roomName = roomNameMap[roomNumber]
             if (note.includes('Credit card on file') || note.includes('Balance due')){
                 note = ''
             } else {
@@ -58,10 +65,42 @@ const main = async () => {
                     note = note.replace('<br>', ', ')
                 }
             }
-            console.log('date=' + date + ': name=' + name + ': days=' + days + ': amount=' + amount + ': note=' + note + ': room=' + roomNumber)
+            roomStays.push(await createRoomStay(date, name, days, amount, note, roomName))
         }
     }
+    let today = new Date()
+    today.setHours(0)
+    today.setMinutes(0)
+    today.setSeconds(0)
+    today.setMilliseconds(0)
+    let finalStays = await combineStays(roomStays)
+    console.log(finalStays)
+    let eveningGuests = await anyGuestsTonight(today, finalStays)
+    let breakfastGuests = await anyGuestsForBreakfast(today, finalStays)
+    let message = await createMessage(today, finalStays, config.daysToCheck)
+    await webhook.send(message)
     await browser.close()
+}
+
+async function createRoomStay(date, name, days, amount, note, room){
+    let split = date.split('-')
+    let year = parseInt(split[0], 10)
+    let month = parseInt(split[1], 10)
+    let day = parseInt(split[2], 10)
+    let nights = parseInt(days, 10)
+    let checkin = new Date(year, month - 1, day, 0, 0, 0, 0)
+    checkin.set
+    let checkout = new Date(checkin)
+    checkout.setDate(checkin.getDate() + nights)
+    return {
+        checkin: checkin,
+        checkout: checkout,
+        name: name,
+        amount: amount,
+        note: note,
+        room: room,
+        nights: parseInt(days, 10)
+    }
 }
 
 async function getOuterHtml(page, element){
@@ -104,6 +143,130 @@ async function getOrdersAndRooms(innerHtml){
         }
     }
     return map
+}
+
+async function anyGuestsTonight(today, roomStays){
+    for (let roomStay of roomStays){
+        let isTonight = await compareDates(roomStay.checkin, today) <= 0 && await compareDates(roomStay.checkout, today) >= 0
+        if (isTonight){
+            return true
+        }
+    }
+    return false
+}
+
+async function anyGuestsForBreakfast(today, roomStays){
+    for (let roomStay of roomStays){
+        let breakfastGuests = await compareDates(roomStay.checkin, today) < 0 && await compareDates(roomStay.checkout, today) >= 0
+        if (breakfastGuests){
+            return true
+        }
+    }
+    return false
+}
+
+async function createMessage(today, roomStays, numberOfDays){
+    let message = ''
+    for (let i = 0; i < numberOfDays; i++){
+        let date = today
+        date.setDate(date.getDate() + i)
+        if (i > 0){
+            message += '\n\n'
+        }
+        message += await getMessageForDay(date, roomStays)
+    }
+    return message
+}
+
+async function compareDates(left, right){
+    let leftTime = left.getTime()
+    let rightTime = right.getTime()
+    if (leftTime < rightTime){
+        return -1
+    } else if (leftTime === rightTime){
+        return 0
+    } else {
+        return 1
+    }
+}
+
+async function combineStays(roomStays){
+    let final = []
+    let map = new Map()
+    for (let roomStay of roomStays){
+        if (!map.has(roomStay.room)){
+            map.set(roomStay.room, [])
+        }
+        map.get(roomStay.room).push(roomStay)
+    }
+    for (let key of map.keys()){
+        let entry = map.get(key)
+        for (let i = 0; i < entry.length; i++){
+            if (i === entry.length - 1){
+                final.push(entry[i])
+            } else {
+                let thisStay = entry[i]
+                let j = i + 1
+                let indexOfLastMerged = i
+                while (j < entry.length && await isSameStay(thisStay, entry[j])){
+                    thisStay.checkout = entry[j].checkout
+                    thisStay.nights += entry[j].nights
+                    indexOfLastMerged = j
+                }
+                if (indexOfLastMerged > i){
+                    i = indexOfLastMerged
+                }
+                final.push(thisStay)
+            }
+        }
+    }
+    return final
+}
+
+async function isSameStay(left, right){
+    return await compareDates(left.checkout, right.checkin) === 0 && left.name === right.name
+}
+
+async function getMessageForDay(day, roomsStays){
+    let checkins = []
+    let checkouts = []
+    for (const roomsStay of roomsStays) {
+        if (await compareDates(roomsStay.checkin, day) === 0){
+            checkins.push(roomsStay)
+        } else if (await compareDates(roomsStay.checkout, day) === 0){
+            checkouts.push(roomsStay)
+        }
+    }
+    let message = await getDayOfWeek(day) + ':\n  Checkins:'
+    if (checkins.length === 0){
+        message += ' NONE'
+    } else {
+        for (let roomStay of checkins){
+            message
+                += '\n   ' + roomStay.name
+                + '\n      ' + 'Room: ' + roomStay.room
+                + '\n      ' + 'Nights: ' + roomStay.nights
+            if (roomStay.note){
+                message += '\n      ' + 'Note: ' + roomStay.note
+            }
+        }
+    }
+    message += '\n  Checkouts:'
+    if (checkouts.length === 0){
+        message += ' NONE'
+    } else {
+        for (let roomStay of checkouts){
+            message
+                += '\n   ' + roomStay.name
+                + '\n      ' + 'Name: ' + roomStay.name
+                + '\n      ' + 'Due: ' + roomStay.amount
+        }
+    }
+    return message
+}
+
+async function getDayOfWeek(date){
+    return date.toLocaleString("en", { weekday: "long", timeZone: 'America/New_York' })
 }
 
 main()
