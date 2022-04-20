@@ -11,6 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "discord-webhook-node": "^1.1.8",
+    "mqtt": "^4.3.7",
     "puppeteer": "^13.5.2"
   }
 }

@@ -1,5 +1,6 @@
 const puppeteer = require('puppeteer')
 const { Webhook } = require('discord-webhook-node')
+const mqttService = require('./mqttService')
 
 const secrets = require('./secrets.json')
 const config = require('./config.json')
@@ -74,9 +75,10 @@ const main = async () => {
     today.setSeconds(0)
     today.setMilliseconds(0)
     let finalStays = await combineStays(roomStays)
-    console.log(finalStays)
     let eveningGuests = await anyGuestsTonight(today, finalStays)
+    await mqttService.changeDeviceState("Evening Guests", eveningGuests)
     let breakfastGuests = await anyGuestsForBreakfast(today, finalStays)
+    await mqttService.changeDeviceState("Breakfast Guests", breakfastGuests)
     let message = await createMessage(today, finalStays, config.daysToCheck)
     await webhook.send(message)
     await browser.close()
@@ -243,7 +245,7 @@ async function getMessageForDay(day, roomsStays){
     } else {
         for (let roomStay of checkins){
             message
-                += '\n   ' + roomStay.name
+                += '\n    ' + roomStay.name
                 + '\n      ' + 'Room: ' + roomStay.room
                 + '\n      ' + 'Nights: ' + roomStay.nights
             if (roomStay.note){
