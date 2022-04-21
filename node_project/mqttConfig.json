@@ -1,5 +1,7 @@
 {
+  "otherAddress": "tcp://172.17.0.4",
   "address": "tcp://192.168.1.121",
+  "maxRetries": "3",
   "devices": [
     {
       "name": "Evening Guests",
@@ -17,13 +19,11 @@
           "manufacturer": "Allen Archer",
           "via_device": "bookitnow"
         },
-        "availability": [
-          {
-            "topic": "homeassistant/binary_sensor/evening_guests/available",
-            "payload_not_available": "OFFLINE",
-            "payload_available": "ONLINE"
-          }
-        ]
+        "availability": {
+          "topic": "homeassistant/binary_sensor/evening_guests/available",
+          "payload_not_available": "OFFLINE",
+          "payload_available": "ONLINE"
+        }
       }
     },
     {
@@ -42,13 +42,11 @@
           "manufacturer": "Allen Archer",
           "via_device": "bookitnow"
         },
-        "availability": [
-          {
-            "topic": "homeassistant/binary_sensor/breakfast_guests/available",
-            "payload_not_available": "OFFLINE",
-            "payload_available": "ONLINE"
-          }
-        ]
+        "availability": {
+          "topic": "homeassistant/binary_sensor/breakfast_guests/available",
+          "payload_not_available": "OFFLINE",
+          "payload_available": "ONLINE"
+        }
       }
     }
   ]

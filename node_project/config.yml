@@ -1,0 +1,6 @@
+port: 3000
+daysToCheck: 3
+timezone: America/New_York
+timeout: 5000
+cronExpression: '0 0 2 * *'
+maxTries: 3
