@@ -37,7 +37,7 @@ async function runScraper(){
     await page.goto(secrets.loginUrl)
     await page.type('#edit-name', secrets.username)
     await page.type('#edit-pass', secrets.password)
-    await page.screenshot({ path: 'login.png' })
+    await page.screenshot({ path: 'screenshots/login.png' })
     await page.click('#edit-submit')
     await page.waitForNavigation({timeout: config.timeout})
     let confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || ""
@@ -45,16 +45,17 @@ async function runScraper(){
         logger.info('Confirmation code required, using stored code = ' + secrets.confirmationCode)
         await page.type('#edit-confirmation-code', secrets.confirmationCode)
         await page.type('#edit-new-password', secrets.password)
-        await page.screenshot({ path: 'confirmation.png' })
+        await page.screenshot({ path: 'screenshots/confirmation.png' })
         await page.click('#edit-submit')
         await page.waitForNavigation({timeout: config.timeout})
         confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || ""
         if (confirmationCodeRequired !== ""){
-            logger.error('Confirmation code incorrect')
+            await page.screenshot({ path: 'screenshots/confirmation_error.png' })
+            logger.error('Confirmation code=' + secrets.confirmationCode + ' is incorrect')
             return
         }
     }
-    await page.screenshot({ path: 'calendar.png' })
+    await page.screenshot({ path: 'screenshots/calendar.png' })
     let calendarDays = Array.from(await page.$$('.calendar-day'))
     let roomStays = []
     for (let i = 0; i < calendarDays.length; i++) {
@@ -96,8 +97,7 @@ async function runScraper(){
     let breakfastGuests = await anyGuestsForBreakfast(today, finalStays)
     mqttService.changeDeviceState("Breakfast Guests", breakfastGuests).then()
     let message = await createMessage(today, finalStays, config.daysToCheck, config.timezone)
-    await webhook.send(message)
-    logger.info(message)
+    webhook.send(message).then()
     await browser.close()
 }
 

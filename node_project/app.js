@@ -89,16 +89,14 @@ async function initialize(){
         secretsFile = fs.readFileSync('./secrets.yml', 'utf-8')
     }
     secrets = yaml.parse(secretsFile)
-    await scraper.initialize(config, secrets, mqttConfig, logger)
+    scraper.initialize(config, secrets, mqttConfig, logger).then()
+    server.listen(config.port)
+    cron.schedule(config.cronExpression, async () => {
+        await runScraper()
+    }, {
+        scheduled: true,
+        timezone: config.timezone
+    })
 }
 
-initialize()
-
-server.listen(config.port)
-
-cron.schedule(config.cronExpression, async () => {
-    await runScraper()
-}, {
-    scheduled: true,
-    timezone: config.timezone
-})
+initialize().then()
