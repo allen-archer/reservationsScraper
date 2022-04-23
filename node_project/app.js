@@ -60,16 +60,11 @@ async function initialize(){
         configFile = fs.readFileSync('./config.yml', 'utf-8')
     }
     config = yaml.parse(configFile)
-    logger = createLogger({
-        format: format.combine(
-            format.timestamp({format: new Date().toLocaleString('en-US', {timeZone: config.timezone})}),
-            format.json(),
-            format.prettyPrint()
-        ),
-        transports: [new transports.File({ filename: "app.log" })],
-        exceptionHandlers: [new transports.File({ filename: "app.log" })],
-        rejectionHandlers: [new transports.File({ filename: "app.log" })],
-    })
+    try {
+        logger = await initializeLogger('./config/app.log')
+    } catch (e) {
+        logger = await initializeLogger('app.log')
+    }
     if (!configLoadedFromVolume) {
         logger.info('config.yml not found in volume.  Using bundled file.')
     }
@@ -96,6 +91,19 @@ async function initialize(){
     }, {
         scheduled: true,
         timezone: config.timezone
+    })
+}
+
+async function initializeLogger(path){
+    return createLogger({
+        format: format.combine(
+            format.timestamp({format: new Date().toLocaleString('en-US', {timeZone: config.timezone})}),
+            format.json(),
+            format.prettyPrint()
+        ),
+        transports: [new transports.File({ filename: path })],
+        exceptionHandlers: [new transports.File({ filename: path })],
+        rejectionHandlers: [new transports.File({ filename: path })],
     })
 }
 
