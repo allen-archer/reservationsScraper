@@ -83,6 +83,19 @@ async function runScraper(){
                     note = note.replace('<br>', ', ')
                 }
             }
+            let notesFromName = await getNotesFromName(name)
+            if (notesFromName){
+                name = await trimNotesFromName(name)
+                if (note){
+                    note = notesFromName + ', ' + note
+                } else {
+                    note = notesFromName
+                }
+            }
+            if (note){
+                note = note.replace('<strong>', '')
+                note = note.replace('</strong>', '')
+            }
             roomStays.push(await createRoomStay(date, name, days, amount, note, roomName))
         }
     }
@@ -99,6 +112,24 @@ async function runScraper(){
     let message = await createMessage(today, finalStays, config.daysToCheck, config.timezone)
     webhook.send(message).then()
     await browser.close()
+}
+
+async function getNotesFromName(name){
+    let split = name.split('<br>')
+    if (split.length > 1){
+        let notes = ''
+        for (let i = 1; i < split.length; i++){
+            if (i > 1){
+                notes += ', '
+            }
+            notes += split[i]
+        }
+        return notes
+    }
+}
+
+async function trimNotesFromName(name){
+    return name.split('<br>')[0]
 }
 
 async function createRoomStay(date, name, days, amount, note, room){
@@ -278,7 +309,7 @@ async function getMessageForDay(day, roomsStays){
         for (let roomStay of checkouts){
             message
                 += '\n    ' + roomStay.name
-                + '\n      ' + 'Name: ' + roomStay.name
+                + '\n      ' + 'Room: ' + roomStay.room
                 + '\n      ' + 'Due: ' + roomStay.amount
         }
     }
