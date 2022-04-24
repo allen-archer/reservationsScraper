@@ -14,7 +14,7 @@ async function publishMessage(topic, message){
 
 async function changeDeviceState(deviceName, state){
     let device = deviceMap.get(deviceName)
-    if (state){
+    if (state === true){
         await publishMessage(device.registerMessage.state_topic, device.registerMessage.state_on)
     } else {
         await publishMessage(device.registerMessage.state_topic, device.registerMessage.state_off)

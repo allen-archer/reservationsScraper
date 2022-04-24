@@ -197,7 +197,7 @@ async function getOrdersAndRooms(innerHtml){
 
 async function anyGuestsTonight(today, roomStays){
     for (let roomStay of roomStays){
-        let isTonight = await compareDates(roomStay.checkin, today) <= 0 && await compareDates(roomStay.checkout, today) >= 0
+        let isTonight = await compareDates(roomStay.checkin, today) <= 0 && await compareDates(roomStay.checkout, today) > 0
         if (isTonight){
             return true
         }
@@ -320,4 +320,8 @@ async function getDayOfWeek(date) {
     return date.toLocaleString("en", {weekday: "long", timeZone: config.timezone})
 }
 
-module.exports = { initialize, runScraper }
+async function changeDeviceState(deviceName, state){
+    mqttService.changeDeviceState(deviceName, state).then()
+}
+
+module.exports = { initialize, runScraper, changeDeviceState }
