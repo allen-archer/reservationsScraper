@@ -109,7 +109,7 @@ async function runScraper(){
     mqttService.changeDeviceState("Evening Guests", eveningGuests).then()
     let breakfastGuests = await anyGuestsForBreakfast(today, finalStays)
     mqttService.changeDeviceState("Breakfast Guests", breakfastGuests).then()
-    let message = await createMessage(today, finalStays, config.daysToCheck, config.timezone)
+    let message = await createMessage(today, finalStays, config.daysToCheck)
     webhook.send(message).then()
     await browser.close()
 }
@@ -288,7 +288,7 @@ async function getMessageForDay(day, roomsStays){
             checkouts.push(roomsStay)
         }
     }
-    let message = await getDayOfWeek(day, config.timezone) + ':\n  Checkins:'
+    let message = day.toLocaleString("en", {weekday: "long"}) + ':\n  Checkins:'
     if (checkins.length === 0){
         message += ' NONE'
     } else {
@@ -314,10 +314,6 @@ async function getMessageForDay(day, roomsStays){
         }
     }
     return message
-}
-
-async function getDayOfWeek(date) {
-    return date.toLocaleString("en", {weekday: "long", timeZone: config.timezone})
 }
 
 async function changeDeviceState(deviceName, state){
