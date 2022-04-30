@@ -58,45 +58,66 @@ async function runScraper(){
     await page.screenshot({ path: 'screenshots/calendar.png' })
     let calendarDays = Array.from(await page.$$('.calendar-day'))
     let roomStays = []
-    for (let i = 0; i < calendarDays.length; i++) {
-        let day = calendarDays[i]
+    for (let day of calendarDays) {
         let inner = await getInnerHtml(page, day)
         let map = await getOrdersAndRooms(inner)
         let orders = Array.from(await day.$$('[id^=order]'))
         let roomNight = await day.$('[id^=room_night]')
         let date = (await safeMatch(await getOuterHtml(page, roomNight), dateRegex))[0][1]
-        for (let j = 0; j < orders.length; j++) {
-            let outerHtml = await getOuterHtml(page, orders[j])
-            let innerHtml = await getInnerHtml(page, orders[j])
+        for (let order of orders) {
+            let outerHtml = await getOuterHtml(page, order)
+            let innerHtml = await getInnerHtml(page, order)
             let amount = (await safeMatch(outerHtml, amountRegex, 1))[0][1]
             let days = (await safeMatch(outerHtml, dataDaysRegex, 1))[0][1]
             let name = (await safeMatch(innerHtml, nameRegex))[0][1]
-            let note = (await safeMatch(innerHtml, noteRegex))[0][1]
+            let note
+            let noteMatches = (await safeMatch(innerHtml, noteRegex))
+            if (noteMatches.length > 0){
+                note = noteMatches[0][1]
+            } else {
+                note = ''
+            }
             let orderId = (await safeMatch(outerHtml, orderIdRegex))[0][1]
             let roomNumber = (await safeMatch(map.get(orderId), roomNumberRegex))[0][1]
             let roomName = secrets.roomNameMap[roomNumber]
-            if (note.includes('Credit card on file') || note.includes('Balance due')){
+            let notes = []
+            if (note.includes('Credit card on file') || note.includes('Balance due')) {
                 note = ''
-            } else {
+            } else if (note !== '') {
                 note = note.replace(RegExp(noteDateRegex, 'g'), '')
-                if (note.includes('<br>')){
-                    note = note.replace('<br>', ', ')
+                if (note.includes('<br>')) {
+                    notes = note.split('<br>')
+                } else {
+                    notes.push(note)
                 }
             }
             let notesFromName = await getNotesFromName(name)
-            if (notesFromName){
+            if (notesFromName) {
                 name = await trimNotesFromName(name)
-                if (note){
-                    note = notesFromName + ', ' + note
-                } else {
-                    note = notesFromName
+                notes.push(notesFromName)
+            }
+            let finalNote = ''
+            if (notes.length > 0) {
+                for (let i = 0; i < notes.length; i++) {
+                    if (notes[i].includes('<strong>')) {
+                        notes[i] = notes[i].replace('<strong>', '')
+                    }
+                    if (notes[i].includes('</strong>')) {
+                        notes[i] = notes[i].replace('</strong>', '')
+                    }
+                    if (notes[i].includes('Special requests: ')) {
+                        notes[i] = notes[i].replace('Special requests: ', '')
+                    }
+                }
+                let distinctNotes = Array.from(new Set(notes))
+                for (let i = 0; i < distinctNotes.length; i++) {
+                    if (i > 0) {
+                        finalNote += ', '
+                    }
+                    finalNote += distinctNotes[i]
                 }
             }
-            if (note){
-                note = note.replace('<strong>', '')
-                note = note.replace('</strong>', '')
-            }
-            roomStays.push(await createRoomStay(date, name, days, amount, note, roomName))
+            roomStays.push(await createRoomStay(date, name, days, amount, finalNote, roomName))
         }
     }
     let today = new Date()
@@ -171,14 +192,13 @@ async function replaceNewlines(text){
 }
 
 async function safeMatch(text, pattern){
-    if (text === undefined || text === null || text === ""){
-        return "N/A"
-    }
     const matches = []
-    let regex = RegExp(pattern, 'g')
-    let groups
-    while ((groups = regex.exec(text)) !== null) {
-        matches.push(Array.from(groups))
+    if (text) {
+        let regex = RegExp(pattern, 'g')
+        let groups
+        while ((groups = regex.exec(text)) !== null) {
+            matches.push(Array.from(groups))
+        }
     }
     return matches
 }
