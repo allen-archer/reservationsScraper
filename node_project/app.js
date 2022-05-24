@@ -5,6 +5,7 @@ const { createLogger, format, transports } = require('winston')
 const fs = require('fs')
 const yaml = require('yaml')
 const scraper = require('./scraper')
+const frigate = require('./frigate')
 
 let secrets
 let config
@@ -48,6 +49,16 @@ const server = http.createServer((req, res) => {
         res.statusCode = 200
         res.setHeader('Content-Type', 'text/plain')
         res.end('Sending MQTT message for ' + queryObject.device + ' with sate ' + queryObject.state + '.')
+    } else if (queryObject.message){
+        frigate.sendMessage(queryObject.message).then()
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'text/plain')
+        res.end('Message ' + queryObject.message + ' sent.')
+    }  else if (queryObject.file){
+        frigate.sendFile(queryObject.file).then()
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'text/plain')
+        res.end('File ' + queryObject.file + ' sent.')
     } else {
         res.statusCode = 200
         res.setHeader('Content-Type', 'text/plain')
@@ -90,6 +101,7 @@ async function initialize(){
     }
     secrets = yaml.parse(secretsFile)
     scraper.initialize(config, secrets, mqttConfig, logger).then()
+    frigate.initialize(config, secrets, logger).then()
     server.listen(config.port)
     cron.schedule(config.cronExpression, async () => {
         await runScraper()

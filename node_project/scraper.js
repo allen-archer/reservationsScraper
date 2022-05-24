@@ -14,16 +14,17 @@ const roomNumberRegex = '.*_(\\d{3,4})'
 let config
 let secrets
 let logger
+let webhook
 
 async function initialize(_config, _secrets, _mqttConfig, _logger){
     config = _config
     secrets = _secrets
     logger = _logger
     await mqttService.initialize(_mqttConfig, _logger)
+    webhook = new Webhook(secrets.scraper.webhook)
 }
 
 async function runScraper(){
-    const webhook = new Webhook(secrets.webHookUrl)
     const browser = await puppeteer.launch({
         headless: true,
         args: [
