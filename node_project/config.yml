@@ -4,3 +4,6 @@ timezone: America/New_York
 timeout: 30000
 cronExpression: '0 2 * * *'
 maxTries: 10
+snapshot:
+  retries: 5
+  sleep: 3
