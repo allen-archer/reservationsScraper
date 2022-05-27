@@ -24,7 +24,6 @@ async function sendFile(file){
     let success = false
     do {
         if (!fs.existsSync(file)){
-            logger.error('File ' + file + ' does not exist yet.  Sleeping for ' + config.snapshot.sleep + ' seconds.')
             count++
             await wait(config.snapshot.sleep * 1000)
         } else {
@@ -32,10 +31,8 @@ async function sendFile(file){
         }
     } while (count < config.snapshot.retries && !success)
     if (!success){
-        logger.error('File ' + file + ' does not exist')
+        logger.error('Checked file existence ' + config.snapshot.retries + ' times.  File ' + file + ' does not exist.')
         return
-    } else {
-        logger.info('File ' + file + ' exists, sending file')
     }
     webhook
         .sendFile(file)
