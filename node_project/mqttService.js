@@ -1,8 +1,11 @@
 const mqtt = require('mqtt')
+const frigate = require('./frigate')
 let mqttConfig
 let client
 let logger
 const deviceMap = new Map()
+const frigateEventsTopic = 'frigate/events'
+let areSnapshotsSnoozed = false
 
 async function publishMessage(topic, message){
     client.publish(topic, message, { qos: 0, retain: true }, (error) => {
@@ -21,10 +24,31 @@ async function changeDeviceState(deviceName, state){
     }
 }
 
-async function initialize(config, _logger){
+async function initialize(_mqttConfig, _logger){
     logger = _logger
-    mqttConfig = config
+    mqttConfig = _mqttConfig
     client = mqtt.connect(mqttConfig.address)
+    client.on('connect', () => {
+        client.subscribe([frigateEventsTopic], () => {
+            logger.info(`Subscribed to topic '${frigateEventsTopic}'`)
+        })
+    })
+    client.on('message', (topic, payload) => {
+        if (areSnapshotsSnoozed){
+            return
+        }
+        const obj = JSON.parse(payload.toString())
+        const before = obj.before
+        const after = obj.after
+        const type = obj.type
+        if (type === 'new'){
+            if (before && before.has_snapshot){
+                frigate.sendSnapshot(before.camera, before.id)
+            } else if (after && after.has_snapshot){
+                frigate.sendSnapshot(after.camera, after.id)
+            }
+        }
+    })
     for (let device of mqttConfig.devices){
         deviceMap.set(device.name, device)
         await publishMessage(device.registerTopic, JSON.stringify(device.registerMessage))
@@ -32,4 +56,9 @@ async function initialize(config, _logger){
     }
 }
 
-module.exports = { initialize, changeDeviceState }
+async function snooze(snooze){
+    logger.info('Snapshots are turned ' + snooze ? 'off' : 'on' + '.')
+    areSnapshotsSnoozed = snooze
+}
+
+module.exports = { initialize, changeDeviceState, snooze }

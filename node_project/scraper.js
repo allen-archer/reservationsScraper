@@ -16,11 +16,10 @@ let secrets
 let logger
 let webhook
 
-async function initialize(_config, _secrets, _mqttConfig, _logger){
+async function initialize(_config, _secrets, _logger){
     config = _config
     secrets = _secrets
     logger = _logger
-    await mqttService.initialize(_mqttConfig, _logger)
     webhook = new Webhook(secrets.scraper.webhook)
 }
 

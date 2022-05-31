@@ -6,6 +6,7 @@ const fs = require('fs')
 const yaml = require('yaml')
 const scraper = require('./scraper')
 const frigate = require('./frigate')
+const mqttService = require("./mqttService");
 
 let secrets
 let config
@@ -49,20 +50,24 @@ const server = http.createServer((req, res) => {
         res.statusCode = 200
         res.setHeader('Content-Type', 'text/plain')
         res.end('Sending MQTT message for ' + queryObject.device + ' with sate ' + queryObject.state + '.')
-    } else if (queryObject.message){
-        frigate.sendMessage(queryObject.message).then()
+    } else if (queryObject.camera && queryObject.id){
+        frigate.sendSnapshot(queryObject.camera, queryObject.id).then()
         res.statusCode = 200
         res.setHeader('Content-Type', 'text/plain')
-        res.end('Message ' + queryObject.message + ' sent.')
-    }  else if (queryObject.file){
-        frigate.sendFile(queryObject.file).then()
+        res.end('Sending snapshot for camera = ' + queryObject.camera + ' and id = ' + queryObject.id)
+    } else if (queryObject.snooze) {
+        mqttService.snooze(queryObject.snooze).then()
         res.statusCode = 200
         res.setHeader('Content-Type', 'text/plain')
-        res.end('File ' + queryObject.file + ' sent.')
+        if (queryObject.snooze) {
+            res.end('Frigate snapshots snoozed.')
+        } else {
+            res.end('Frigate snapshots no longer snoozed.')
+        }
     } else {
         res.statusCode = 200
         res.setHeader('Content-Type', 'text/plain')
-        res.end('Please supply confirmation code.')
+        res.end('Request params =' + JSON.stringify(queryObject) + ' not recognized.')
     }
 })
 
@@ -100,6 +105,7 @@ async function initialize(){
         secretsFile = fs.readFileSync('./secrets.yml', 'utf-8')
     }
     secrets = yaml.parse(secretsFile)
+    mqttService.initialize(mqttConfig, logger).then()
     scraper.initialize(config, secrets, mqttConfig, logger).then()
     frigate.initialize(config, secrets, logger).then()
     server.listen(config.port)
