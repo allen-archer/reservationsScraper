@@ -1,5 +1,6 @@
-const {Webhook} = require("discord-webhook-node");
-const fs = require('fs');
+const Discord = require('discord.js')
+const http = require('http')
+const fs = require('fs')
 
 let config
 let secrets
@@ -10,35 +11,76 @@ async function initialize(_config, _secrets, _logger){
     config = _config
     secrets = _secrets
     logger = _logger
-    webhook = new Webhook(secrets.frigate.webhook)
+    webhook = new Discord.WebhookClient({url: secrets.frigate.webhook})
 }
 
-async function sendMessage(message){
-    webhook
-        .send(message)
-        .catch(e => logger.error(e.message))
-}
-
-async function sendFile(file){
-    let count = 0
-    let success = false
-    do {
-        if (!fs.existsSync(file)){
-            count++
-            await wait(config.snapshot.sleep * 1000)
-        } else {
-            success = true
+async function sendSnapshot(camera, id, count = 1) {
+    const filename = camera + '-' + id + '.jpg'
+    const path = config.snapshot.path
+    if (fs.existsSync(path + filename)) {
+        sendFile(path + filename, filename).then()
+    } else {
+        const tempFile = config.snapshot.temp + filename
+        const options = {
+            hostname: config.frigate.host,
+            port: config.frigate.port,
+            path: '/clips/' + camera + '-' + id + '.jpg'
         }
-    } while (count < config.snapshot.retries && !success)
-    if (!success){
-        logger.error('Checked file existence ' + config.snapshot.retries + ' times.  File ' + file + ' does not exist.')
-        return
+        http.get(options, res => {
+            let data = []
+            let size = 0
+            res.on('data', d => {
+                size += d.length
+                data.push(d)
+            })
+            res.on('end', async d => {
+                if (size < 200){
+                    if (count <= config.snapshot.retries) {
+                        const seconds = count * count
+                        logger.info('File doesn\'t exist, waiting and retrying in ' + seconds + ' seconds.')
+                        await delay(seconds * 1000)
+                        return sendSnapshot(camera, id, count + 1)
+                    } else {
+                        logger.error('File doesn\'t exist but max retries reached.')
+                        return
+                    }
+                }
+                const image = Buffer.concat(data, size)
+                fs.writeFile(
+                    tempFile,
+                    image,
+                    'binary',
+                        error => {
+                            if (error){
+                                logger.error(error.message)
+                            }
+                            sendFile(tempFile, filename)
+                        }
+                )
+            })
+        }).on('error', error => {
+            logger.error(error.message)
+        })
     }
-    webhook
-        .sendFile(file)
-        .catch(e => logger.error(e.message))
 }
 
-const wait = (ms) => new Promise(res => setTimeout(res, ms))
+async function sendFile(filePath, fileName){
+    webhook
+        .send(
+            {
+                files: [
+                    {
+                        attachment: filePath,
+                        name: fileName
+                    }
+                ]
+            }
+        )
+        .catch(error => logger.error(error.message))
+}
 
-module.exports = { initialize, sendMessage, sendFile }
+function delay(time) {
+    return new Promise(resolve => setTimeout(resolve, time));
+}
+
+module.exports = { initialize, sendSnapshot }
