@@ -19,12 +19,15 @@ async function sendSnapshot(camera, id, count = 1) {
     const path = config.snapshot.path
     if (fs.existsSync(path + filename)) {
         sendFile(path + filename, filename).then()
+        if (count > 1){
+            logger.info('File ' + filename + ' found in clips after ' + count + ' tries')
+        }
     } else {
         const tempFile = config.snapshot.temp + filename
         const options = {
             hostname: config.frigate.host,
             port: config.frigate.port,
-            path: '/clips/' + camera + '-' + id + '.jpg'
+            path: '/api/events/' + id + '/snapshot.jpg?bbox=1&timestamp=1&crop=1&h=480&quality=90'
         }
         http.get(options, res => {
             let data = []
@@ -36,14 +39,16 @@ async function sendSnapshot(camera, id, count = 1) {
             res.on('end', async d => {
                 if (size < 200){
                     if (count <= config.snapshot.retries) {
-                        const seconds = count * count
-                        logger.info('File doesn\'t exist, waiting and retrying in ' + seconds + ' seconds.')
+                        const seconds = config.snapshot.wait
                         await delay(seconds * 1000)
                         return sendSnapshot(camera, id, count + 1)
                     } else {
-                        logger.error('File doesn\'t exist but max retries reached.')
+                        logger.error(filename + ' doesn\'t exist but max retries reached after ' + count + ' tries.')
                         return
                     }
+                }
+                if (count > 1){
+                    logger.info('File ' + filename + ' retrieved from Frigate after ' + count + ' tries.')
                 }
                 const image = Buffer.concat(data, size)
                 fs.writeFile(
