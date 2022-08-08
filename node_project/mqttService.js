@@ -73,8 +73,13 @@ async function createDeviceList(mqttConfig, secrets){
 }
 
 async function snooze(snooze){
-    logger.info('Snapshots are turned ' + snooze ? 'off' : 'on' + '.')
-    areSnapshotsSnoozed = snooze
+    if (snooze === 'on'){
+        logger.info('Snapshots are turned off.')
+        areSnapshotsSnoozed = true
+    } else {
+        logger.info('Snapshots are turned on.')
+        areSnapshotsSnoozed = false
+    }
 }
 
 module.exports = { initialize, changeDeviceState, snooze }
