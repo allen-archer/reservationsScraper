@@ -105,8 +105,8 @@ async function initialize(){
         secretsFile = fs.readFileSync('./secrets.yml', 'utf-8')
     }
     secrets = yaml.parse(secretsFile)
-    mqttService.initialize(mqttConfig, logger).then()
-    scraper.initialize(config, secrets, mqttConfig, logger).then()
+    mqttService.initialize(mqttConfig, secrets, logger).then()
+    scraper.initialize(config, secrets, logger).then()
     frigate.initialize(config, secrets, logger).then()
     server.listen(config.port)
     cron.schedule(config.cronExpression, async () => {

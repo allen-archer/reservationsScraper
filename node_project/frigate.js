@@ -37,11 +37,11 @@ async function sendSnapshot(camera, id, count = 1) {
                 if (size < 200){
                     if (count <= config.snapshot.retries) {
                         const seconds = count * count
-                        logger.info('File doesn\'t exist, waiting and retrying in ' + seconds + ' seconds.')
+                        logger.info(filename + ' doesn\'t exist, waiting and retrying in ' + seconds + ' seconds.')
                         await delay(seconds * 1000)
                         return sendSnapshot(camera, id, count + 1)
                     } else {
-                        logger.error('File doesn\'t exist but max retries reached.')
+                        logger.error(filename + ' doesn\'t exist but max retries reached.')
                         return
                     }
                 }
