@@ -50,6 +50,7 @@ async function runScraper(){
         await page.waitForNavigation({timeout: config.timeout})
         confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || ""
         if (confirmationCodeRequired !== ""){
+            webhook.send('SCRAPER NEEDS NEW CONFIRMATION CODE').then()
             await page.screenshot({ path: 'screenshots/confirmation_error.png' })
             logger.error('Confirmation code=' + secrets.confirmationCode + ' is incorrect')
             return
@@ -117,7 +118,13 @@ async function runScraper(){
                     finalNote += distinctNotes[i]
                 }
             }
-            roomStays.push(await createRoomStay(date, name, days, amount, finalNote, roomName))
+            if (Array.isArray(roomName)){
+                for (let subName of roomName){
+                    roomStays.push(await createRoomStay(date, name, days, amount, finalNote, subName))
+                }
+            } else {
+                roomStays.push(await createRoomStay(date, name, days, amount, finalNote, roomName))
+            }
         }
     }
     let today = new Date()
