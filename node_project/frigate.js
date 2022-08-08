@@ -40,6 +40,7 @@ async function sendSnapshot(camera, id, count = 1) {
                 if (size < 200){
                     if (count <= config.snapshot.retries) {
                         const seconds = config.snapshot.wait
+                        logger.info(filename + ' doesn\'t exist, waiting and retrying in ' + seconds + ' seconds.')
                         await delay(seconds * 1000)
                         return sendSnapshot(camera, id, count + 1)
                     } else {

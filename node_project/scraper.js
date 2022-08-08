@@ -127,9 +127,14 @@ async function runScraper(){
     today.setMilliseconds(0)
     let finalStays = await combineStays(roomStays)
     let eveningGuests = await anyGuestsTonight(today, finalStays)
-    mqttService.changeDeviceState("Evening Guests", eveningGuests).then()
+    mqttService.changeDeviceState('Evening Guests', eveningGuests).then()
     let breakfastGuests = await anyGuestsForBreakfast(today, finalStays)
-    mqttService.changeDeviceState("Breakfast Guests", breakfastGuests).then()
+    mqttService.changeDeviceState('Breakfast Guests', breakfastGuests).then()
+    let occupancyMap = await createOccupancyMap(roomStays)
+    for (let key of occupancyMap.keys()){
+        mqttService.changeDeviceState('occupancy ' + key,
+            await isRoomOccupiedTonight(today, occupancyMap.get(key))).then()
+    }
     let message = await createMessage(today, finalStays, config.daysToCheck)
     webhook.send(message).then()
     await browser.close()
@@ -217,12 +222,34 @@ async function getOrdersAndRooms(innerHtml){
 
 async function anyGuestsTonight(today, roomStays){
     for (let roomStay of roomStays){
-        let isTonight = await compareDates(roomStay.checkin, today) <= 0 && await compareDates(roomStay.checkout, today) > 0
-        if (isTonight){
+        if (await compareDates(roomStay.checkin, today) <= 0 && await compareDates(roomStay.checkout, today) > 0){
             return true
         }
     }
     return false
+}
+
+async function isRoomOccupiedTonight(today, roomStays){
+    let room = ''
+    for (let roomStay of roomStays){
+        room = roomStay.room
+        if (await compareDates(roomStay.checkin, today) <= 0 && await compareDates(roomStay.checkout, today) > 0){
+            return true
+        }
+    }
+    return false
+}
+
+async function createOccupancyMap(roomStays){
+    let map = new Map()
+    for (let roomStay of roomStays){
+        let room = roomStay.room
+        if (!map.has(room)){
+            map.set(room, [])
+        }
+        map.get(room).push(roomStay)
+    }
+    return map
 }
 
 async function anyGuestsForBreakfast(today, roomStays){
