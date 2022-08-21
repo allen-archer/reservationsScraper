@@ -1,10 +1,6 @@
 const https = require('https')
 
-const url = 'https://rucsoundings.noaa.gov/get_soundings.cgi?data_source=Op40&latest=latest&start_year=2022&start_month_name=Aug&start_mday=20&start_hour=17&start_min=0&n_hrs=18&fcst_len=shortest&airport=KLNS&text=Ascii%20text%20%28GSL%20format%29&hydrometeors=false&start=latest'
-
-async function main(){
-    await doRequest()
-}
+const url = 'https://rucsoundings.noaa.gov/get_soundings.cgi?data_source=Op40&latest=latest&n_hrs=18&fcst_len=shortest&airport=KLNS&text=Ascii%20text%20%28GSL%20format%29&hydrometeors=false&start=latest'
 
 async function doRequest(){
     const request = https.request(url, (response) => {
@@ -30,22 +26,22 @@ async function doRequest(){
 
 async function parse(data){
     const layerSize = 100
-    const maxElevation = 3000
+    const maxElevation = 2000
     const split = data.split('\n')
     let table = []
     let newSet = true
     let surface
     let group = []
     let nextLayer = 0
-    const header = ['elev', 'temp', 'head', 'mph']
+    let previousLayer = 0
+    const header = ['elev', 'mph', 'head', 'temp']
     for (let i = 0; i < split.length; i++){
-        let lineSplit = split[i].trim().split(/ +/)
-        let first = lineSplit[0]
+        let line = split[i].trim().split(/ +/)
+        let first = line[0]
         if (first === '' || isNaN(first)){
             if (!newSet){
                 newSet = true
                 table.push(group)
-            } else {
                 group = []
             }
         } else {
@@ -55,12 +51,14 @@ async function parse(data){
             if (first === '9'){
                 newSet = false
                 nextLayer = 0
-                surface = lineSplit[2]
+                previousLayer = 0
+                surface = line[2]
                 group.push(header)
             }
-            let elevation = lineSplit[2] - surface
-            if (elevation <= maxElevation && elevation >= nextLayer) {
-                group.push(await generateRow(lineSplit, elevation))
+            let elevation = line[2] - surface
+            if (previousLayer <= maxElevation && elevation >= nextLayer) {
+                group.push(await createRow(line, elevation))
+                previousLayer = elevation
                 nextLayer = elevation + layerSize
             }
         }
@@ -68,21 +66,13 @@ async function parse(data){
     return table
 }
 
-async function generateRow(arr, elevation){
+async function createRow(line, elevation){
     let row = []
     row.push(elevation)
-    row.push(await convertTemp(arr[3]))
-    row.push(Number(arr[5]))
-    row.push(await convertKnots(arr[6]))
+    row.push(Math.round(line[6] * 1.151))
+    row.push(Number(line[5]))
+    row.push(Math.round(((line[3] / 10) * 1.8) + 32))
     return row
 }
 
-async function convertTemp(temp){
-    return Math.round(((temp / 10) * 1.8) + 32)
-}
-
-async function convertKnots(speed){
-    return Math.round(speed * 1.151)
-}
-
-main().then()
+doRequest().then()
