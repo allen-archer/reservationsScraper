@@ -90,7 +90,7 @@ async function createLayerData(line, altitude){
 
 async function sunrise(time){
     const table = await getAndParseData()
-    const sunrise = new Date(time).getHours()
+    const sunrise = new Date(time).getUTCHours()
     const start = sunrise - 1
     const end  = sunrise + 3
     let returnData = []
@@ -105,10 +105,9 @@ async function sunrise(time){
 
 async function sunset(time){
     const table = await getAndParseData()
-    const sunset = new Date(time)
-    const sunsetHour = sunset.getUTCHours()
-    const start = sunsetHour - 3
-    const end  = sunsetHour + 1
+    const sunset = new Date(time).getUTCHours()
+    const start = sunset - 3
+    const end  = sunset + 1
     let returnData = []
     for (let i = 0; i < table.length; i++){
         const hour = table[i].hour
