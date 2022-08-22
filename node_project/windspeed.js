@@ -1,78 +1,122 @@
-const https = require('https')
-
 const url = 'https://rucsoundings.noaa.gov/get_soundings.cgi?data_source=Op40&latest=latest&n_hrs=18&fcst_len=shortest&airport=KLNS&text=Ascii%20text%20%28GSL%20format%29&hydrometeors=false&start=latest'
 
-async function doRequest(){
-    const request = https.request(url, (response) => {
-        let data = ''
-        response.on('data', (chunk) => {
-            data = data + chunk.toString()
-        })
-        response.on('end', () => {
-            parse(data).then(table => {
-                for (let i = 0; i < table.length; i++){
-                    console.log('--------------------- set ' + i + ' ---------------------')
-                    console.log(table[i])
-                    console.log('     ')
-                }
-            })
-        })
-    })
-    request.on('error', (error) => {
-        console.error(error)
-    })
-    request.end()
+let logger
+
+async function initialize(_logger){
+    logger = _logger
+}
+
+async function getAndParseData(){
+    try {
+        const response = await fetch(url)
+        if (!response.ok){
+            throw new Error("Whoops")
+        }
+        const data = await response.text()
+        return await parse(data)
+    } catch (error) {
+        console.log(error)
+        return null
+    }
 }
 
 async function parse(data){
     const layerSize = 100
-    const maxElevation = 2000
+    const maxAltitude = 2000
     const split = data.split('\n')
     let table = []
     let newSet = true
     let surface
-    let group = []
+    let group
     let nextLayer = 0
     let previousLayer = 0
-    const header = ['elev', 'mph', 'head', 'temp']
+    let day
+    let month
+    let year
+    let hour
     for (let i = 0; i < split.length; i++){
         let line = split[i].trim().split(/ +/)
         let first = line[0]
         if (first === '' || isNaN(first)){
+            if (first === 'Op40'&& !isNaN(line[1])){
+                hour = line[1]
+                day = line[2]
+                month = line[3]
+                year = line[4]
+            }
             if (!newSet){
                 newSet = true
                 table.push(group)
-                group = []
             }
         } else {
             if (first <= 3){
                 continue
+            }
+            if (line[2] === '99999'){
+                continue // Random junk lines that have to be thrown out for some reason.
             }
             if (first === '9'){
                 newSet = false
                 nextLayer = 0
                 previousLayer = 0
                 surface = line[2]
-                group.push(header)
+                group = {
+                    hour: hour,
+                    day: day,
+                    month: month,
+                    year: year,
+                    layerData: []
+                }
             }
-            let elevation = line[2] - surface
-            if (previousLayer <= maxElevation && elevation >= nextLayer) {
-                group.push(await createRow(line, elevation))
-                previousLayer = elevation
-                nextLayer = elevation + layerSize
+            let altitude = line[2] - surface
+            if (previousLayer <= maxAltitude && altitude >= nextLayer) {
+                group.layerData.push(await createLayerData(line, altitude))
+                previousLayer = altitude
+                nextLayer = altitude + layerSize
             }
         }
     }
     return table
 }
 
-async function createRow(line, elevation){
-    let row = []
-    row.push(elevation)
-    row.push(Math.round(line[6] * 1.151))
-    row.push(Number(line[5]))
-    row.push(Math.round(((line[3] / 10) * 1.8) + 32))
-    return row
+async function createLayerData(line, altitude){
+    return {
+        altitude: altitude,
+        windSpeed: Math.round(line[6] * 1.151),
+        windDirection: Number(line[5]),
+        temperature: Math.round(((line[3] / 10) * 1.8) + 32)
+    }
 }
 
-doRequest().then()
+async function sunrise(time){
+    const table = await getAndParseData()
+    const sunrise = new Date(time).getHours()
+    const start = sunrise - 1
+    const end  = sunrise + 3
+    let returnData = []
+    for (let i = 0; i < table.length; i++){
+        const hour = table[i].hour
+        if (hour >= start && hour <= end){
+            returnData.push(table[i])
+        }
+    }
+    return returnData
+}
+
+async function sunset(time){
+    const table = await getAndParseData()
+    const sunset = new Date(time)
+    const sunsetHour = sunset.getUTCHours()
+    const start = sunsetHour - 3
+    const end  = sunsetHour + 1
+    let returnData = []
+    for (let i = 0; i < table.length; i++){
+        const hour = table[i].hour
+        if (hour >= start && hour <= end){
+            returnData.push(table[i])
+        }
+    }
+    return returnData
+}
+
+module.exports = { initialize, sunrise, sunset }

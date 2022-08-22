@@ -1,5 +1,5 @@
-const http = require('http')
-const url = require('url')
+const express = require('express')
+const app = express()
 const cron = require('node-cron')
 const { createLogger, format, transports } = require('winston')
 const fs = require('fs')
@@ -7,6 +7,7 @@ const yaml = require('yaml')
 const scraper = require('./scraper')
 const frigate = require('./frigate')
 const mqttService = require("./mqttService");
+const windspeed = require("./windspeed")
 
 let secrets
 let config
@@ -35,41 +36,6 @@ async function runScraper(){
         logger.error('Failed to run ' + maxTries + ' times')
     }
 }
-
-const server = http.createServer((req, res) => {
-    const queryObject = url.parse(req.url, true).query
-    if (queryObject.confirmationCode){
-        secrets.confirmationCode = queryObject.confirmationCode
-        runScraper().then()
-        res.statusCode = 200
-        res.setHeader('Content-Type', 'text/plain')
-        res.end('Running scrape process with confirmation code')
-    } else if (queryObject.device) {
-        let state = queryObject.state === 'true'
-        scraper.changeDeviceState(queryObject.device, state).then()
-        res.statusCode = 200
-        res.setHeader('Content-Type', 'text/plain')
-        res.end('Sending MQTT message for ' + queryObject.device + ' with sate ' + queryObject.state + '.')
-    } else if (queryObject.camera && queryObject.id){
-        frigate.sendSnapshot(queryObject.camera, queryObject.id).then()
-        res.statusCode = 200
-        res.setHeader('Content-Type', 'text/plain')
-        res.end('Sending snapshot for camera = ' + queryObject.camera + ' and id = ' + queryObject.id)
-    } else if (queryObject.snooze) {
-        mqttService.snooze(queryObject.snooze).then()
-        res.statusCode = 200
-        res.setHeader('Content-Type', 'text/plain')
-        if (queryObject.snooze) {
-            res.end('Frigate snapshots snoozed.')
-        } else {
-            res.end('Frigate snapshots no longer snoozed.')
-        }
-    } else {
-        res.statusCode = 200
-        res.setHeader('Content-Type', 'text/plain')
-        res.end('Request params =' + JSON.stringify(queryObject) + ' not recognized.')
-    }
-})
 
 async function initialize(){
     let configLoadedFromVolume = true
@@ -108,7 +74,10 @@ async function initialize(){
     mqttService.initialize(mqttConfig, secrets, logger).then()
     scraper.initialize(config, secrets, logger).then()
     frigate.initialize(config, secrets, logger).then()
-    server.listen(config.port)
+    windspeed.initialize(logger).then()
+    app.listen(config.port, () => {
+        logger.info('server listening on port: ' + config.port)
+    })
     cron.schedule(config.cronExpression, async () => {
         await runScraper()
     }, {
@@ -129,5 +98,46 @@ async function initializeLogger(path){
         rejectionHandlers: [new transports.File({ filename: path })],
     })
 }
+
+app.get('/sunset', (request, response) => {
+    windspeed
+        .sunset(request.query['time'])
+        .then(data => {
+            response.send(data)
+        })
+})
+
+app.get('/sunrise', (request, response) => {
+    windspeed
+        .sunrise(request.query['time'])
+        .then(data => {
+            response.send(data)
+        })
+})
+
+app.get('/', (request, response) => {
+    const queryObject = request.query
+    if (queryObject.confirmationCode){
+        secrets.confirmationCode = queryObject.confirmationCode
+        runScraper().then()
+        response.send('Running scrape process with confirmation code')
+    } else if (queryObject.device) {
+        let state = queryObject.state === 'true'
+        scraper.changeDeviceState(queryObject.device, state).then()
+        response.send('Sending MQTT message for ' + queryObject.device + ' with sate ' + queryObject.state + '.')
+    } else if (queryObject.camera && queryObject.id){
+        frigate.sendSnapshot(queryObject.camera, queryObject.id).then()
+        response.send('Sending snapshot for camera = ' + queryObject.camera + ' and id = ' + queryObject.id)
+    } else if (queryObject.snooze !== undefined) {
+        mqttService.snooze(queryObject.snooze).then()
+        if (queryObject.snooze === 'true') {
+            response.send('Frigate snapshots snoozed.')
+        } else {
+            response.send('Frigate snapshots no longer snoozed.')
+        }
+    } else {
+        response.send('Request params =' + JSON.stringify(queryObject) + ' not recognized.')
+    }
+})
 
 initialize().then()
