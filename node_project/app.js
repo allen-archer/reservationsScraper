@@ -101,7 +101,7 @@ async function initializeLogger(path){
 
 app.get('/sunset', (request, response) => {
     windspeed
-        .sunset(request.query['time'])
+        .sunset(request.query['time'], request.query['airport'])
         .then(data => {
             response.send(data)
         })
@@ -109,7 +109,7 @@ app.get('/sunset', (request, response) => {
 
 app.get('/sunrise', (request, response) => {
     windspeed
-        .sunrise(request.query['time'])
+        .sunrise(request.query['time'], request.query['airport'])
         .then(data => {
             response.send(data)
         })

@@ -1,4 +1,4 @@
-const url = 'https://rucsoundings.noaa.gov/get_soundings.cgi?data_source=Op40&latest=latest&n_hrs=18&fcst_len=shortest&airport=KLNS&text=Ascii%20text%20%28GSL%20format%29&hydrometeors=false&start=latest'
+const url = 'https://rucsoundings.noaa.gov/get_soundings.cgi?data_source=Op40&latest=latest&n_hrs=18&fcst_len=shortest&airport=${airport}&text=Ascii%20text%20%28GSL%20format%29&hydrometeors=false&start=latest'
 
 let logger
 
@@ -6,9 +6,12 @@ async function initialize(_logger){
     logger = _logger
 }
 
-async function getAndParseData(){
+async function getAndParseData(airport){
     try {
-        const response = await fetch(url)
+        if (!airport){
+            airport = 'KLNS'
+        }
+        const response = await fetch(url.replace('${airport}', airport))
         if (!response.ok){
             throw new Error("Whoops")
         }
