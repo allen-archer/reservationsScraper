@@ -6,8 +6,7 @@ const fs = require('fs')
 const yaml = require('yaml')
 const scraper = require('./scraper')
 const frigate = require('./frigate')
-const mqttService = require("./mqttService");
-const windspeed = require("./windspeed")
+const mqttService = require("./mqttService")
 
 let secrets
 let config
@@ -74,7 +73,6 @@ async function initialize(){
     mqttService.initialize(mqttConfig, secrets, logger).then()
     scraper.initialize(config, secrets, logger).then()
     frigate.initialize(config, secrets, logger).then()
-    windspeed.initialize(logger).then()
     app.listen(config.port, () => {
         logger.info('server listening on port: ' + config.port)
     })
@@ -98,22 +96,6 @@ async function initializeLogger(path){
         rejectionHandlers: [new transports.File({ filename: path })],
     })
 }
-
-app.get('/sunset', (request, response) => {
-    windspeed
-        .sunset(request.query['time'], request.query['airport'])
-        .then(data => {
-            response.send(data)
-        })
-})
-
-app.get('/sunrise', (request, response) => {
-    windspeed
-        .sunrise(request.query['time'], request.query['airport'])
-        .then(data => {
-            response.send(data)
-        })
-})
 
 app.get('/', (request, response) => {
     const queryObject = request.query
