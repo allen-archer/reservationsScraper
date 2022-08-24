@@ -86,4 +86,9 @@ async function snooze(snooze){
     }
 }
 
-module.exports = { initialize, changeDeviceState, snooze }
+async function publishAttributes(deviceName, attributes){
+    const device = deviceMap.get(deviceName)
+    await publishMessage(device.registerMessage.json_attributes_topic, JSON.stringify(attributes))
+}
+
+module.exports = { initialize, changeDeviceState, snooze, publishAttributes }

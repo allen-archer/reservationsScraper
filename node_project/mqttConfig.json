@@ -71,6 +71,30 @@
           "payload_available": "ONLINE"
         }
       }
+    },
+    {
+      "name": "occupancy phone numbers",
+      "registerTopic": "homeassistant/sensor/occupancy_phone_numbers/config",
+      "registerMessage": {
+        "name": "occupancy phone numbers",
+        "unique_id": "occupancy_phone_numbers_01",
+        "state_topic": "homeassistant/sensor/occupancy_phone_numbers/state",
+        "state_on": "ON",
+        "state_off": "OFF",
+        "device": {
+          "model": "1.0.0",
+          "identifiers": "bookitnow",
+          "name": "Book-it-now",
+          "manufacturer": "Allen Archer",
+          "via_device": "bookitnow"
+        },
+        "availability": {
+          "topic": "homeassistant/sensor/occupancy_phone_numbers/available",
+          "payload_not_available": "OFFLINE",
+          "payload_available": "ONLINE"
+        },
+        "json_attributes_topic": "homeassistant/sensor/occupancy_phone_numbers/state"
+      }
     }
   ]
 }
