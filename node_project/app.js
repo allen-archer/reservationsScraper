@@ -122,4 +122,15 @@ app.get('/', (request, response) => {
     }
 })
 
+app.get('/scrape', (request, response) => {
+    const query = request.query
+    if (query.confirmationCode){
+        secrets.confirmationCode = query.confirmationCode
+    }
+    response.send('Scrape process started')
+    runScraper().then(() => {
+        logger.info('Manual scrape process finished.')
+    })
+})
+
 initialize().then()

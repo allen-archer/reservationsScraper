@@ -23,6 +23,149 @@ async function initialize(_config, _secrets, _logger){
     webhook = new Webhook(secrets.scraper.webhook)
 }
 
+// async function runScraper(){
+//     const browser = await puppeteer.launch({
+//         headless: true,
+//         args: [
+//             "--disable-gpu",
+//             "--disable-dev-shm-usage",
+//             "--disable-setuid-sandbox",
+//             "--no-sandbox",
+//         ],
+//     })
+//     const page = await browser.newPage()
+//     await page.goto(secrets.loginUrl)
+//     await page.type('#edit-name', secrets.username)
+//     await page.type('#edit-pass', secrets.password)
+//     await page.screenshot({ path: 'screenshots/login.png' })
+//     await page.click('#edit-submit')
+//     await page.waitForNavigation({timeout: config.timeout})
+//     let confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || ''
+//     if (confirmationCodeRequired){
+//         await page.screenshot({ path: 'screenshots/confirmation.png' })
+//         logger.info('Confirmation code required, using stored code = ' + secrets.confirmationCode)
+//         await page.type('#edit-confirmation-code', secrets.confirmationCode)
+//         await page.screenshot({ path: 'screenshots/confirmation2.png' })
+//         await page.type('#edit-new-password', secrets.password)
+//         await page.screenshot({ path: 'screenshots/confirmation3.png' })
+//         await page.click('#edit-submit')
+//         await page.waitForNavigation({timeout: config.timeout})
+//         await page.screenshot({ path: 'screenshots/confirmation4.png' })
+//         confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || ''
+//         if (confirmationCodeRequired !== ''){
+//             webhook.send('SCRAPER NEEDS NEW CONFIRMATION CODE').then()
+//             await page.screenshot({ path: 'screenshots/confirmation_error.png' })
+//             logger.error('Confirmation code=' + secrets.confirmationCode + ' is incorrect')
+//             return
+//         }
+//     }
+//     await page.screenshot({ path: 'screenshots/calendar.png' })
+//     let calendarDays = Array.from(await page.$$('.calendar-day'))
+//     let roomStays = []
+//     for (let day of calendarDays) {
+//         let inner = await getInnerHtml(page, day)
+//         let map = await getOrdersAndRooms(inner)
+//         let orders = Array.from(await day.$$('[id^=order]'))
+//         let roomNight = await day.$('[id^=room_night]')
+//         let date = (await safeMatch(await getOuterHtml(page, roomNight), dateRegex))[0][1]
+//         for (let order of orders){
+//             await order.click()
+//             await page.waitForSelector('[id^=reservation_phones-value]')
+//             await page.screenshot({ path: 'screenshots/popup.png' })
+//             let phones = await getInnerHtml(page, await page.$('[id^=reservation_phones-value]'))
+//             try {
+//                 await page.click('#close-button')
+//             } catch (error){
+//                 // This happens when the end of the calendar is reached
+//                 // I'm sure there's a more graceful way to handle this
+//                 // But this works, so...
+//                 break
+//             }
+//             await page.waitForSelector('[id^=reservation_phones-value]', {hidden: true})
+//         }
+        // for (let order of orders) {
+        //     let outerHtml = await getOuterHtml(page, order)
+        //     let innerHtml = await getInnerHtml(page, order)
+        //     let amount = (await safeMatch(outerHtml, amountRegex, 1))[0][1]
+        //     let days = (await safeMatch(outerHtml, dataDaysRegex, 1))[0][1]
+        //     let name = (await safeMatch(innerHtml, nameRegex))[0][1]
+        //     let note
+        //     let noteMatches = (await safeMatch(innerHtml, noteRegex))
+        //     if (noteMatches.length > 0){
+        //         note = noteMatches[0][1]
+        //     } else {
+        //         note = ''
+        //     }
+        //     let orderId = (await safeMatch(outerHtml, orderIdRegex))[0][1]
+        //     let roomNumber = (await safeMatch(map.get(orderId), roomNumberRegex))[0][1]
+        //     let roomName = secrets.roomNameMap[roomNumber]
+        //     let notes = []
+        //     if (note.includes('Credit card on file') || note.includes('Balance due')) {
+        //         note = ''
+        //     } else if (note !== '') {
+        //         note = note.replace(RegExp(noteDateRegex, 'g'), '')
+        //         if (note.includes('<br>')) {
+        //             notes = note.split('<br>')
+        //         } else {
+        //             notes.push(note)
+        //         }
+        //     }
+        //     let notesFromName = await getNotesFromName(name)
+        //     if (notesFromName) {
+        //         name = await trimNotesFromName(name)
+        //         notes.push(notesFromName)
+        //     }
+        //     let finalNote = ''
+        //     if (notes.length > 0) {
+        //         for (let i = 0; i < notes.length; i++) {
+        //             if (notes[i].includes('<strong>')) {
+        //                 notes[i] = notes[i].replace('<strong>', '')
+        //             }
+        //             if (notes[i].includes('</strong>')) {
+        //                 notes[i] = notes[i].replace('</strong>', '')
+        //             }
+        //             if (notes[i].includes('Special requests: ')) {
+        //                 notes[i] = notes[i].replace('Special requests: ', '')
+        //             }
+        //         }
+        //         let distinctNotes = Array.from(new Set(notes))
+        //         for (let i = 0; i < distinctNotes.length; i++) {
+        //             if (i > 0) {
+        //                 finalNote += ', '
+        //             }
+        //             finalNote += distinctNotes[i]
+        //         }
+        //     }
+        //     if (Array.isArray(roomName)){
+        //         for (let subName of roomName){
+        //             roomStays.push(await createRoomStay(date, name, days, amount, finalNote, subName))
+        //         }
+        //     } else {
+        //         roomStays.push(await createRoomStay(date, name, days, amount, finalNote, roomName))
+        //     }
+        // }
+    // }
+    // let today = new Date()
+    // today.setHours(0)
+    // today.setMinutes(0)
+    // today.setSeconds(0)
+    // today.setMilliseconds(0)
+    // let finalStays = await combineStays(roomStays)
+    // let eveningGuests = await anyGuestsTonight(today, finalStays)
+    // mqttService.changeDeviceState('Evening Guests', eveningGuests).then()
+    // let breakfastGuests = await anyGuestsForBreakfast(today, finalStays)
+    // mqttService.changeDeviceState('Breakfast Guests', breakfastGuests).then()
+    // let occupancyMap = await createOccupancyMap(roomStays)
+    // for (let key of occupancyMap.keys()){
+    //     mqttService.changeDeviceState('occupancy ' + key,
+    //         await isRoomOccupiedTonight(today, occupancyMap.get(key))).then()
+    // }
+    // let message = await createMessage(today, finalStays, config.daysToCheck)
+    // webhook.send(message).then()
+//     await browser.close()
+// }
+
+
 async function runScraper(){
     const browser = await puppeteer.launch({
         headless: true,
@@ -66,6 +209,19 @@ async function runScraper(){
         let roomNight = await day.$('[id^=room_night]')
         let date = (await safeMatch(await getOuterHtml(page, roomNight), dateRegex))[0][1]
         for (let order of orders) {
+            await order.click()
+            await page.waitForSelector('[id^=reservation_phones-value]')
+            let phonesRaw = await getInnerHtml(page, await page.$('[id^=reservation_phones-value]'))
+            let phones = await parsePhones(phonesRaw)
+            try {
+                await page.click('#close-button')
+            } catch (error){
+                // This happens when the end of the calendar is reached
+                // I'm sure there's a more graceful way to handle this
+                // But this works, so...
+                break
+            }
+            await page.waitForSelector('[id^=reservation_phones-value]', {hidden: true})
             let outerHtml = await getOuterHtml(page, order)
             let innerHtml = await getInnerHtml(page, order)
             let amount = (await safeMatch(outerHtml, amountRegex, 1))[0][1]
@@ -120,10 +276,10 @@ async function runScraper(){
             }
             if (Array.isArray(roomName)){
                 for (let subName of roomName){
-                    roomStays.push(await createRoomStay(date, name, days, amount, finalNote, subName))
+                    roomStays.push(await createRoomStay(date, name, days, amount, finalNote, subName, phones))
                 }
             } else {
-                roomStays.push(await createRoomStay(date, name, days, amount, finalNote, roomName))
+                roomStays.push(await createRoomStay(date, name, days, amount, finalNote, roomName, phones))
             }
         }
     }
@@ -142,6 +298,8 @@ async function runScraper(){
         mqttService.changeDeviceState('occupancy ' + key,
             await isRoomOccupiedTonight(today, occupancyMap.get(key))).then()
     }
+    mqttService.publishAttributes('occupancy phone numbers',
+        { state: 'on', phones: await getAllPhoneNumbersForGuestsTonight(today, finalStays)}).then()
     let message = await createMessage(today, finalStays, config.daysToCheck)
     webhook.send(message).then()
     await browser.close()
@@ -165,7 +323,26 @@ async function trimNotesFromName(name){
     return name.split('<br>')[0]
 }
 
-async function createRoomStay(date, name, days, amount, note, room){
+async function parsePhones(phones){
+    let returnData = []
+    let temp = []
+    if (phones.includes('<br>')){
+        const split = phones.split('<br>')
+        for (let str of split){
+            temp.push(str)
+        }
+    } else {
+        temp.push(phones)
+    }
+    for (let phone of temp){
+        let str = phone.replace('+1', '')
+        str = str.replace(/\s/g, '')
+        returnData.push(str)
+    }
+    return returnData
+}
+
+async function createRoomStay(date, name, days, amount, note, room, phones){
     let split = date.split('-')
     let year = parseInt(split[0], 10)
     let month = parseInt(split[1], 10)
@@ -182,7 +359,8 @@ async function createRoomStay(date, name, days, amount, note, room){
         amount: amount,
         note: note,
         room: room,
-        nights: parseInt(days, 10)
+        nights: parseInt(days, 10),
+        phones: phones
     }
 }
 
@@ -234,6 +412,18 @@ async function anyGuestsTonight(today, roomStays){
         }
     }
     return false
+}
+
+async function getAllPhoneNumbersForGuestsTonight(today, roomStays){
+    let phones = new Set()
+    for (let roomStay of roomStays){
+        if (await compareDates(roomStay.checkin, today) <= 0 && await compareDates(roomStay.checkout, today) > 0){
+            for (let phone of roomStay.phones){
+                phones.add(phone)
+            }
+        }
+    }
+    return Array.from(phones)
 }
 
 async function isRoomOccupiedTonight(today, roomStays){
@@ -353,6 +543,15 @@ async function getMessageForDay(day, roomsStays){
                 + '\n      ' + 'Nights: ' + roomStay.nights
             if (roomStay.note){
                 message += '\n      ' + 'Note: ' + roomStay.note
+            }
+            if (roomStay.phones){
+                message += '\n      ' + 'Phone: '
+                for (let i = 0; i < roomStay.phones.length; i++){
+                    if (i > 0){
+                        message += ', '
+                    }
+                    message += roomStay.phones[i]
+                }
             }
         }
     }
