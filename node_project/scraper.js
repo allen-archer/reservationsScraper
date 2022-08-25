@@ -133,10 +133,10 @@ async function runScraper(){
             }
             if (Array.isArray(roomName)){
                 for (let subName of roomName){
-                    roomStays.push(await createRoomStay(date, name, days, amount, finalNote, subName, phones))
+                    roomStays.push(await createRoomStay(date, name, days, amount, finalNote, subName, phones, roomNumber))
                 }
             } else {
-                roomStays.push(await createRoomStay(date, name, days, amount, finalNote, roomName, phones))
+                roomStays.push(await createRoomStay(date, name, days, amount, finalNote, roomName, phones, roomNumber))
             }
         }
     }
@@ -156,7 +156,7 @@ async function runScraper(){
             await isRoomOccupiedTonight(today, occupancyMap.get(key))).then()
     }
     mqttService.publishAttributes('occupancy phone numbers',
-        { state: 'on', phones: await getAllPhoneNumbersForGuestsTonight(today, finalStays)}).then()
+        { state: 'ON', phones: await getAllPhoneNumbersForGuestsTonight(today, finalStays)}).then()
     let message = await createMessage(today, finalStays, config.daysToCheck)
     webhook.send(message).then()
     await browser.close()
@@ -199,7 +199,7 @@ async function parsePhones(phones){
     return returnData
 }
 
-async function createRoomStay(date, name, days, amount, note, room, phones){
+async function createRoomStay(date, name, days, amount, note, room, phones, roomNumber){
     let split = date.split('-')
     let year = parseInt(split[0], 10)
     let month = parseInt(split[1], 10)
@@ -217,7 +217,8 @@ async function createRoomStay(date, name, days, amount, note, room, phones){
         note: note,
         room: room,
         nights: parseInt(days, 10),
-        phones: phones
+        phones: phones,
+        roomNumber: roomNumber
     }
 }
 
@@ -272,15 +273,17 @@ async function anyGuestsTonight(today, roomStays){
 }
 
 async function getAllPhoneNumbersForGuestsTonight(today, roomStays){
-    let phones = new Set()
+    let map = new Map()
     for (let roomStay of roomStays){
         if (await compareDates(roomStay.checkin, today) <= 0 && await compareDates(roomStay.checkout, today) > 0){
+            let phones = []
             for (let phone of roomStay.phones){
-                phones.add(phone)
+                phones.push(phone)
             }
+            map.set(roomStay.roomNumber, phones)
         }
     }
-    return Array.from(phones)
+    return Object.fromEntries(map)
 }
 
 async function isRoomOccupiedTonight(today, roomStays){
