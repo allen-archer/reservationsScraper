@@ -23,41 +23,7 @@ async function initialize(_config, _secrets, _logger){
     webhook = new Webhook(secrets.scraper.webhook)
 }
 
-async function runScraper(){
-    const browser = await puppeteer.launch({
-        headless: true,
-        args: [
-            "--disable-gpu",
-            "--disable-dev-shm-usage",
-            "--disable-setuid-sandbox",
-            "--no-sandbox",
-        ],
-    })
-    const page = await browser.newPage()
-    await page.goto(secrets.loginUrl)
-    await page.type('#edit-name', secrets.username)
-    await page.type('#edit-pass', secrets.password)
-    await page.screenshot({ path: 'screenshots/login.png' })
-    await page.click('#edit-submit')
-    await page.waitForNavigation({timeout: config.timeout})
-    let confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || ""
-    if (confirmationCodeRequired !== ""){
-        logger.info('Confirmation code required, using stored code = ' + secrets.confirmationCode)
-        await page.type('#edit-confirmation-code', secrets.confirmationCode)
-        await page.type('#edit-new-password', secrets.password)
-        await page.screenshot({ path: 'screenshots/confirmation.png' })
-        await page.click('#edit-submit')
-        await page.waitForNavigation({timeout: config.timeout})
-        confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || ""
-        if (confirmationCodeRequired !== ""){
-            webhook.send('SCRAPER NEEDS NEW CONFIRMATION CODE').then()
-            await page.screenshot({ path: 'screenshots/confirmation_error.png' })
-            logger.error('Confirmation code=' + secrets.confirmationCode + ' is incorrect')
-            return
-        }
-    }
-    await page.screenshot({ path: 'screenshots/calendar.png' })
-    let calendarDays = Array.from(await page.$$('.calendar-day'))
+async function scrapeRooms(calendarDays, page) {
     let roomStays = []
     for (let day of calendarDays) {
         let inner = await getInnerHtml(page, day)
@@ -72,7 +38,7 @@ async function runScraper(){
             let phones = await parsePhones(phonesRaw)
             try {
                 await page.click('#close-button')
-            } catch (error){
+            } catch (error) {
                 // This happens when the end of the calendar is reached
                 // I'm sure there's a more graceful way to handle this
                 // But this works, so...
@@ -86,7 +52,7 @@ async function runScraper(){
             let name = (await safeMatch(innerHtml, nameRegex))[0][1]
             let note
             let noteMatches = (await safeMatch(innerHtml, noteRegex))
-            if (noteMatches.length > 0){
+            if (noteMatches.length > 0) {
                 note = noteMatches[0][1]
             } else {
                 note = ''
@@ -131,8 +97,8 @@ async function runScraper(){
                     finalNote += distinctNotes[i]
                 }
             }
-            if (Array.isArray(roomName)){
-                for (let subName of roomName){
+            if (Array.isArray(roomName)) {
+                for (let subName of roomName) {
                     roomStays.push(await createRoomStay(date, name, days, amount, finalNote, subName, phones, roomNumber))
                 }
             } else {
@@ -140,6 +106,45 @@ async function runScraper(){
             }
         }
     }
+    return roomStays
+}
+
+async function runScraper(){
+    const browser = await puppeteer.launch({
+        headless: true,
+        args: [
+            "--disable-gpu",
+            "--disable-dev-shm-usage",
+            "--disable-setuid-sandbox",
+            "--no-sandbox",
+        ],
+    })
+    const page = await browser.newPage()
+    await page.goto(secrets.loginUrl)
+    await page.type('#edit-name', secrets.username)
+    await page.type('#edit-pass', secrets.password)
+    await page.screenshot({ path: 'screenshots/login.png' })
+    await page.click('#edit-submit')
+    await page.waitForNavigation({timeout: config.timeout})
+    let confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || ""
+    if (confirmationCodeRequired !== ""){
+        logger.info('Confirmation code required, using stored code = ' + secrets.confirmationCode)
+        await page.type('#edit-confirmation-code', secrets.confirmationCode)
+        await page.type('#edit-new-password', secrets.password)
+        await page.screenshot({ path: 'screenshots/confirmation.png' })
+        await page.click('#edit-submit')
+        await page.waitForNavigation({timeout: config.timeout})
+        confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || ""
+        if (confirmationCodeRequired !== ""){
+            webhook.send('SCRAPER NEEDS NEW CONFIRMATION CODE').then()
+            await page.screenshot({ path: 'screenshots/confirmation_error.png' })
+            logger.error('Confirmation code=' + secrets.confirmationCode + ' is incorrect')
+            return
+        }
+    }
+    await page.screenshot({ path: 'screenshots/calendar.png' })
+    let calendarDays = Array.from(await page.$$('.calendar-day'))
+    let roomStays = await scrapeRooms(calendarDays, page)
     let today = new Date()
     today.setHours(0)
     today.setMinutes(0)
