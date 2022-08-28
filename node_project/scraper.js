@@ -2,15 +2,6 @@ const puppeteer = require('puppeteer')
 const {Webhook} = require("discord-webhook-node");
 const mqttService = require("./mqttService");
 
-const dateRegex = 'data-ajax="(.*?):'
-const dataDaysRegex = 'data-days="(.*?)"'
-const amountRegex = '(\\$\\d{0,3},{0,1}\\d{1,3}\\.\\d{2})'
-const nameRegex = '<div title="(.*?)"'
-const noteRegex = '<span class=".*?title="(.*?)"'
-const noteDateRegex = '\\d{2}\\/\\d{2}\\/\\d{4} \\d{2}:\\d{2}: '
-const orderIdRegex = ' id="(.*?)"'
-const roomNumberRegex = '.*_(\\d{3,4})'
-
 let config
 let secrets
 let logger
@@ -23,15 +14,118 @@ async function initialize(_config, _secrets, _logger){
     webhook = new Webhook(secrets.scraper.webhook)
 }
 
+async function getComments(page){
+    const fullComments = await getInnerHtml(page, await page.$('#comment-full-comment'))
+    if (fullComments){
+        return await trimMoreLessTags(fullComments)
+    } else {
+        return await getInnerHtml(page, await page.$('#reservation_comments-value'))
+    }
+}
+
+async function trimMoreLessTags(text){
+    if (text.includes('<')) {
+        return text.substring(0, text.indexOf('<'))
+    } else {
+        return text
+    }
+}
+
+async function getDates(dateString){
+    let split = dateString.split(' - ')
+    return {
+        checkin: new Date(split[0]),
+        checkout: new Date(split[1])
+    }
+}
+
+async function getUndefinedItems(page, titles, values){
+    let object = {}
+    for (let i = 0; i < titles.length; i++){
+        const title = await getInnerHtml(page, titles[i])
+        const value = await getInnerHtml(page, values[i])
+        if (title.includes('Approximate Arrival Time')){
+            object.eta = await trimMoreLessTags(value)
+        } else if (title.includes('dietary')){
+            object.dietary = await trimMoreLessTags(value)
+        } else if (title.includes('Anything else we should know')){
+            object.anythingElse = await trimMoreLessTags(value)
+        }
+    }
+    return object
+}
+
+async function getRoomNames(text){
+    const roomNumberMap = secrets.roomNumberMap
+    let roomNames = []
+    const firstSplit = text.split(' - ')
+    for (let firstString of firstSplit){
+        const secondSplit = firstString.split(' ')
+        for (let secondString of secondSplit){
+            if (roomNumberMap[secondString]){
+                roomNames.push(secondString)
+                break
+            }
+        }
+    }
+    return roomNames
+}
+
+async function scrapeRooms(calendarDays, page) {
+    let roomStays = []
+    for (let day of calendarDays) {
+        const orders = Array.from(await day.$$('[id^=order_]'))
+        for (let order of orders) {
+            await order.click()
+            await page.waitForSelector('#reservation_occupants-value')
+            const name = await getInnerHtml(page, await page.$(`#reservation_name-value > a`))
+            const roomNames = await getRoomNames(await getInnerHtml(page, await page.$(
+                `body > div.ui-dialog.ui-widget.ui-widget-content.ui-corner-all.ui-front.reservation-ui-popup-container.ui-draggable > div.ui-dialog-titlebar.ui-widget-header.ui-corner-all.ui-helper-clearfix.ui-draggable-handle > span`
+            )))
+            const dates = await getDates(await getInnerHtml(page, await page.$('#reservation_checkin-value')))
+            const checkinTimeString = await getInnerHtml(page, await page.$('#reservation_checkin_time-value'))
+            const guestName = await getInnerHtml(page, await page.$('#reservation_additional_comments_billing_guest-value'))
+            const amountDue = await getInnerHtml(page, await page.$('#reservation_balance-value'))
+            let notes = await getUndefinedItems(
+                page,
+                Array.from(await page.$$('#undefined-title')),
+                Array.from(await page.$$('#undefined-value'))
+            )
+            notes.guestComments = await getComments(page)
+            notes.innkeepersComments = await getInnerHtml(page, await page.$('#reservation_notes-value'))
+            const phonesRaw = await getInnerHtml(page, await page.$('#reservation_phones-value'))
+            const phones = await parsePhones(phonesRaw)
+            try {
+                await page.click('#close-button')
+            } catch (error) {
+                // This happens when the end of the calendar is reached
+                // I'm sure there's a more graceful way to handle this
+                // But this works, so...
+                break
+            }
+            await page.waitForSelector('#reservation_occupants-value', {hidden: true})
+            for (let roomName of roomNames) {
+                roomStays.push(await createRoomStay(dates, name, amountDue, roomName, phones, notes, guestName, checkinTimeString))
+            }
+        }
+    }
+    return roomStays
+}
+
 async function runScraper(){
     const browser = await puppeteer.launch({
         headless: true,
         args: [
-            "--disable-gpu",
-            "--disable-dev-shm-usage",
-            "--disable-setuid-sandbox",
-            "--no-sandbox",
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+            '--no-sandbox',
+            '--window-size=1920,1080' // default is 800x600, and that was actually stopping some elements from working correctly
         ],
+        defaultViewport: {
+            width: 1920,
+            height: 1080
+        }
     })
     const page = await browser.newPage()
     await page.goto(secrets.loginUrl)
@@ -40,16 +134,16 @@ async function runScraper(){
     await page.screenshot({ path: 'screenshots/login.png' })
     await page.click('#edit-submit')
     await page.waitForNavigation({timeout: config.timeout})
-    let confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || ""
-    if (confirmationCodeRequired !== ""){
+    let confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || ''
+    if (confirmationCodeRequired !== ''){
         logger.info('Confirmation code required, using stored code = ' + secrets.confirmationCode)
         await page.type('#edit-confirmation-code', secrets.confirmationCode)
         await page.type('#edit-new-password', secrets.password)
         await page.screenshot({ path: 'screenshots/confirmation.png' })
         await page.click('#edit-submit')
         await page.waitForNavigation({timeout: config.timeout})
-        confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || ""
-        if (confirmationCodeRequired !== ""){
+        confirmationCodeRequired = (await page.$('#edit-confirmation-code')) || ''
+        if (confirmationCodeRequired !== ''){
             webhook.send('SCRAPER NEEDS NEW CONFIRMATION CODE').then()
             await page.screenshot({ path: 'screenshots/confirmation_error.png' })
             logger.error('Confirmation code=' + secrets.confirmationCode + ' is incorrect')
@@ -58,88 +152,8 @@ async function runScraper(){
     }
     await page.screenshot({ path: 'screenshots/calendar.png' })
     let calendarDays = Array.from(await page.$$('.calendar-day'))
-    let roomStays = []
-    for (let day of calendarDays) {
-        let inner = await getInnerHtml(page, day)
-        let map = await getOrdersAndRooms(inner)
-        let orders = Array.from(await day.$$('[id^=order]'))
-        let roomNight = await day.$('[id^=room_night]')
-        let date = (await safeMatch(await getOuterHtml(page, roomNight), dateRegex))[0][1]
-        for (let order of orders) {
-            await order.click()
-            await page.waitForSelector('[id^=reservation_phones-value]')
-            let phonesRaw = await getInnerHtml(page, await page.$('[id^=reservation_phones-value]'))
-            let phones = await parsePhones(phonesRaw)
-            try {
-                await page.click('#close-button')
-            } catch (error){
-                // This happens when the end of the calendar is reached
-                // I'm sure there's a more graceful way to handle this
-                // But this works, so...
-                break
-            }
-            await page.waitForSelector('[id^=reservation_phones-value]', {hidden: true})
-            let outerHtml = await getOuterHtml(page, order)
-            let innerHtml = await getInnerHtml(page, order)
-            let amount = (await safeMatch(outerHtml, amountRegex, 1))[0][1]
-            let days = (await safeMatch(outerHtml, dataDaysRegex, 1))[0][1]
-            let name = (await safeMatch(innerHtml, nameRegex))[0][1]
-            let note
-            let noteMatches = (await safeMatch(innerHtml, noteRegex))
-            if (noteMatches.length > 0){
-                note = noteMatches[0][1]
-            } else {
-                note = ''
-            }
-            let orderId = (await safeMatch(outerHtml, orderIdRegex))[0][1]
-            let roomNumber = (await safeMatch(map.get(orderId), roomNumberRegex))[0][1]
-            let roomName = secrets.roomNameMap[roomNumber]
-            let notes = []
-            if (note.includes('Credit card on file') || note.includes('Balance due')) {
-                note = ''
-            } else if (note !== '') {
-                note = note.replace(RegExp(noteDateRegex, 'g'), '')
-                if (note.includes('<br>')) {
-                    notes = note.split('<br>')
-                } else {
-                    notes.push(note)
-                }
-            }
-            let notesFromName = await getNotesFromName(name)
-            if (notesFromName) {
-                name = await trimNotesFromName(name)
-                notes.push(notesFromName)
-            }
-            let finalNote = ''
-            if (notes.length > 0) {
-                for (let i = 0; i < notes.length; i++) {
-                    if (notes[i].includes('<strong>')) {
-                        notes[i] = notes[i].replace('<strong>', '')
-                    }
-                    if (notes[i].includes('</strong>')) {
-                        notes[i] = notes[i].replace('</strong>', '')
-                    }
-                    if (notes[i].includes('Special requests: ')) {
-                        notes[i] = notes[i].replace('Special requests: ', '')
-                    }
-                }
-                let distinctNotes = Array.from(new Set(notes))
-                for (let i = 0; i < distinctNotes.length; i++) {
-                    if (i > 0) {
-                        finalNote += ', '
-                    }
-                    finalNote += distinctNotes[i]
-                }
-            }
-            if (Array.isArray(roomName)){
-                for (let subName of roomName){
-                    roomStays.push(await createRoomStay(date, name, days, amount, finalNote, subName, phones, roomNumber))
-                }
-            } else {
-                roomStays.push(await createRoomStay(date, name, days, amount, finalNote, roomName, phones, roomNumber))
-            }
-        }
-    }
+    let roomStays = await scrapeRooms(calendarDays, page)
+    console.log(JSON.stringify(roomStays))
     let today = new Date()
     today.setHours(0)
     today.setMinutes(0)
@@ -162,24 +176,6 @@ async function runScraper(){
     await browser.close()
 }
 
-async function getNotesFromName(name){
-    let split = name.split('<br>')
-    if (split.length > 1){
-        let notes = ''
-        for (let i = 1; i < split.length; i++){
-            if (i > 1){
-                notes += ', '
-            }
-            notes += split[i]
-        }
-        return notes
-    }
-}
-
-async function trimNotesFromName(name){
-    return name.split('<br>')[0]
-}
-
 async function parsePhones(phones){
     let returnData = []
     let temp = []
@@ -199,35 +195,31 @@ async function parsePhones(phones){
     return returnData
 }
 
-async function createRoomStay(date, name, days, amount, note, room, phones, roomNumber){
-    let split = date.split('-')
-    let year = parseInt(split[0], 10)
-    let month = parseInt(split[1], 10)
-    let day = parseInt(split[2], 10)
-    let nights = parseInt(days, 10)
-    let checkin = new Date(year, month - 1, day, 0, 0, 0, 0)
-    checkin.set
-    let checkout = new Date(checkin)
-    checkout.setDate(checkin.getDate() + nights)
+async function daysBetweenDates(first, second){
+    const difference = second.getTime() - first.getTime()
+    return Math.round(Math.abs(difference / 86400000))
+}
+
+async function createRoomStay(dates, name, amount, roomName, phones, notes, guest, checkinTime){
     return {
-        checkin: checkin,
-        checkout: checkout,
+        checkin: dates.checkin,
+        checkout: dates.checkout,
         name: name,
+        guest: guest,
+        roomNumber: secrets.roomNumberMap[roomName],
         amount: amount,
-        note: note,
-        room: room,
-        nights: parseInt(days, 10),
+        room: roomName,
+        nights: await daysBetweenDates(dates.checkin, dates.checkout),
         phones: phones,
-        roomNumber: roomNumber
+        checkinTime: checkinTime,
+        notes: notes
     }
 }
 
-async function getOuterHtml(page, element){
-    let text = await page.evaluate(element => element.outerHTML, element)
-    return replaceNewlines(text)
-}
-
 async function getInnerHtml(page, element){
+    if (element === null){
+        return ''
+    }
     let text = await page.evaluate(element => element.innerHTML, element)
     return replaceNewlines(text)
 }
@@ -237,30 +229,6 @@ async function replaceNewlines(text){
         return ""
     }
     return text.replace(/[\r\n]+/g,"")
-}
-
-async function safeMatch(text, pattern){
-    const matches = []
-    if (text) {
-        let regex = RegExp(pattern, 'g')
-        let groups
-        while ((groups = regex.exec(text)) !== null) {
-            matches.push(Array.from(groups))
-        }
-    }
-    return matches
-}
-
-async function getOrdersAndRooms(innerHtml){
-    let regex = await safeMatch(innerHtml, orderIdRegex)
-    let map = new Map()
-    for (let i = 0; i < regex.length; i++){
-        let thisText = regex[i][1]
-        if (thisText.includes('order')){
-            map.set(thisText, regex[i+1][1])
-        }
-    }
-    return map
 }
 
 async function anyGuestsTonight(today, roomStays){
@@ -401,8 +369,26 @@ async function getMessageForDay(day, roomsStays){
                 += '\n    ' + roomStay.name
                 + '\n      ' + 'Room: ' + roomStay.room
                 + '\n      ' + 'Nights: ' + roomStay.nights
-            if (roomStay.note){
-                message += '\n      ' + 'Note: ' + roomStay.note
+            if (roomStay.guest){
+                message += '\n      ' + 'Guest: ' + roomStay.guest
+            }
+            if (roomStay.checkinTime){
+                message += '\n      ' + 'Checkin: ' + roomStay.checkinTime
+            }
+            if (roomStay.notes.eta){
+                message += '\n      ' + 'ETA: ' + roomStay.notes.eta
+            }
+            if (roomStay.notes.dietary){
+                message += '\n      ' + 'Dietary restrictions: ' + roomStay.notes.dietary
+            }
+            if (roomStay.notes.guestComments){
+                message += '\n      ' + 'Guest comments: ' + roomStay.notes.guestComments
+            }
+            if (roomStay.notes.innkeepersComments){
+                message += '\n      ' + 'Innkeepers comments: ' + roomStay.notes.innkeepersComments
+            }
+            if (roomStay.notes.anythingElse){
+                message += '\n      ' + 'Anything else?: ' + roomStay.notes.anythingElse
             }
             if (roomStay.phones){
                 message += '\n      ' + 'Phone: '
