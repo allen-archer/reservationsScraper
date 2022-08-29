@@ -6,6 +6,7 @@ let config
 let secrets
 let logger
 let webhook
+let runFailure = false
 
 async function initialize(_config, _secrets, _logger){
     config = _config
@@ -147,6 +148,7 @@ async function runScraper(){
             webhook.send('SCRAPER NEEDS NEW CONFIRMATION CODE').then()
             await page.screenshot({ path: 'screenshots/confirmation_error.png' })
             logger.error('Confirmation code=' + secrets.confirmationCode + ' is incorrect')
+            runFailure = true
             return
         }
     }
@@ -173,6 +175,7 @@ async function runScraper(){
         { state: 'ON', phones: await getAllPhoneNumbersForGuestsTonight(today, finalStays)}).then()
     let message = await createMessage(today, finalStays, config.daysToCheck)
     webhook.send(message).then()
+    runFailure = false
     await browser.close()
 }
 
@@ -419,4 +422,9 @@ async function changeDeviceState(deviceName, state){
     mqttService.changeDeviceState(deviceName, state).then()
 }
 
-module.exports = { initialize, runScraper, changeDeviceState }
+async function updateCode(confirmationCode){
+    secrets.confirmationCode = confirmationCode
+    return runFailure
+}
+
+module.exports = { initialize, runScraper, changeDeviceState, updateCode }
