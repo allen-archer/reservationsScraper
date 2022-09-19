@@ -1,6 +1,6 @@
-package org.chunkystyles.bookitnow.scraper.batch;
+package org.chunkystyles.reservations.scraper.batch;
 
-import org.chunkystyles.bookitnow.scraper.service.ScraperService;
+import org.chunkystyles.reservations.scraper.service.ScraperService;
 import org.springframework.batch.item.ItemProcessor;
 
 public class ScraperItemProcessor implements ItemProcessor<String, String> {

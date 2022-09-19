@@ -9,13 +9,13 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>org.chunkystyles</groupId>
-    <artifactId>bookItNowScraper</artifactId>
+    <artifactId>reservationsScraper</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>bookItNowScraper</name>
+    <name>reservationsScraper</name>
     <description>A web scraper for my hotel booking software</description>
 
     <properties>
-        <java.version>11</java.version>
+        <java.version>16</java.version>
     </properties>
 
     <dependencies>
@@ -106,8 +106,8 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>16</source>
-                    <target>16</target>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
                 </configuration>
             </plugin>
         </plugins>

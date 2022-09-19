@@ -1,4 +1,4 @@
-package org.chunkystyles.bookitnow.scraper.service;
+package org.chunkystyles.reservations.scraper.service;
 
 import club.minnced.discord.webhook.WebhookClient;
 import com.gargoylesoftware.htmlunit.WebClient;
@@ -7,9 +7,9 @@ import io.micrometer.core.lang.Nullable;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.chunkystyles.bookitnow.scraper.configuration.ArgumentsValues;
-import org.chunkystyles.bookitnow.scraper.configuration.Secrets;
-import org.chunkystyles.bookitnow.scraper.model.RoomStay;
+import org.chunkystyles.reservations.scraper.configuration.ArgumentsValues;
+import org.chunkystyles.reservations.scraper.configuration.Secrets;
+import org.chunkystyles.reservations.scraper.model.RoomStay;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;

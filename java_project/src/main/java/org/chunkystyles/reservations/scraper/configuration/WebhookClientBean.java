@@ -1,4 +1,4 @@
-package org.chunkystyles.bookitnow.scraper.configuration;
+package org.chunkystyles.reservations.scraper.configuration;
 
 import club.minnced.discord.webhook.WebhookClient;
 import org.springframework.context.annotation.Bean;

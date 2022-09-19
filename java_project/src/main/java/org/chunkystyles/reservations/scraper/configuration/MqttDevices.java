@@ -1,6 +1,6 @@
-package org.chunkystyles.bookitnow.scraper.configuration;
+package org.chunkystyles.reservations.scraper.configuration;
 
-import org.chunkystyles.bookitnow.scraper.model.MqttDevice;
+import org.chunkystyles.reservations.scraper.model.MqttDevice;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;

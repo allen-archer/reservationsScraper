@@ -1,13 +1,13 @@
-package org.chunkystyles.bookitnow.scraper;
+package org.chunkystyles.reservations.scraper;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 
 @SpringBootApplication(exclude = {DataSourceAutoConfiguration.class})
-public class BookItNowScraperApplication {
+public class ReservationsScraperApplication {
 
   public static void main(String[] args) {
-    SpringApplication.run(BookItNowScraperApplication.class, args);
+    SpringApplication.run(ReservationsScraperApplication.class, args);
   }
 }

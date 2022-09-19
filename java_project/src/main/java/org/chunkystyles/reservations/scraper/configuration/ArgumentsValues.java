@@ -1,4 +1,4 @@
-package org.chunkystyles.bookitnow.scraper.configuration;
+package org.chunkystyles.reservations.scraper.configuration;
 
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Value;

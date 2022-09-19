@@ -1,9 +1,9 @@
-package org.chunkystyles.bookitnow.scraper.service;
+package org.chunkystyles.reservations.scraper.service;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.chunkystyles.bookitnow.scraper.configuration.ArgumentsValues;
-import org.chunkystyles.bookitnow.scraper.model.MqttDevice;
+import org.chunkystyles.reservations.scraper.configuration.ArgumentsValues;
+import org.chunkystyles.reservations.scraper.model.MqttDevice;
 import org.eclipse.paho.client.mqttv3.*;
 import org.springframework.stereotype.Service;
 
