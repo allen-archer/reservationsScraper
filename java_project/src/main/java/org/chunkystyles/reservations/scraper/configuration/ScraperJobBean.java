@@ -1,7 +1,7 @@
-package org.chunkystyles.bookitnow.scraper.configuration;
+package org.chunkystyles.reservations.scraper.configuration;
 
-import org.chunkystyles.bookitnow.scraper.batch.ScraperItemProcessor;
-import org.chunkystyles.bookitnow.scraper.service.ScraperService;
+import org.chunkystyles.reservations.scraper.batch.ScraperItemProcessor;
+import org.chunkystyles.reservations.scraper.service.ScraperService;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;

@@ -21,7 +21,7 @@ Configutation:
       AppenderRef:
         - ref: Console_Appender
     Logger:
-      - name: org.chunkystyles.bookitnow.scraper
+      - name: org.chunkystyles.reservations.scraper
         level: info
         AppenderRef:
           - ref: File_Appender

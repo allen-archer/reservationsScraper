@@ -1,4 +1,4 @@
-package org.chunkystyles.bookitnow.scraper.service;
+package org.chunkystyles.reservations.scraper.service;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

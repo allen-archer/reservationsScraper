@@ -1,4 +1,4 @@
-package org.chunkystyles.bookitnow.scraper.model;
+package org.chunkystyles.reservations.scraper.model;
 
 import lombok.Data;
 

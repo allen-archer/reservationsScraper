@@ -13,5 +13,5 @@ scraper:
   numberOfDays: 3 # Number of days to run report on, 3 means today, tomorrow, and the next day, set via --numberofdays
 mqtt:
   broker:
-    address: 127.0.0.1 # Set via --mqttaddress
+    address: 192.168.1.121 # Set via --mqttaddress
     port: 1883 # Set via --mqttport

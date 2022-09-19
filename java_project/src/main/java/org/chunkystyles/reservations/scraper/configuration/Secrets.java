@@ -1,4 +1,4 @@
-package org.chunkystyles.bookitnow.scraper.configuration;
+package org.chunkystyles.reservations.scraper.configuration;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.PropertySource;
