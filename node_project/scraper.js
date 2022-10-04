@@ -121,6 +121,10 @@ async function runScraper(){
             '--disable-dev-shm-usage',
             '--disable-setuid-sandbox',
             '--no-sandbox',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
             '--window-size=1920,1080' // default is 800x600, and that was actually stopping some elements from working correctly
         ],
         defaultViewport: {
@@ -128,6 +132,16 @@ async function runScraper(){
             height: 1080
         }
     })
+    try {
+        await doRun(browser);
+    } catch (e){
+        throw e
+    } finally {
+        await browser.close()
+    }
+}
+
+async function doRun(browser){
     const page = await browser.newPage()
     await page.goto(secrets.loginUrl)
     await page.type('#edit-name', secrets.username)
@@ -176,7 +190,6 @@ async function runScraper(){
     let message = await createMessage(today, finalStays, config.daysToCheck)
     webhook.send(message).then()
     runFailure = false
-    await browser.close()
 }
 
 async function parsePhones(phones){
