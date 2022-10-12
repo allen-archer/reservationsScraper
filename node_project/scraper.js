@@ -184,6 +184,8 @@ async function doRun(browser){
     for (let key of occupancyMap.keys()){
         mqttService.changeDeviceState('occupancy ' + key,
             await isRoomOccupiedTonight(today, occupancyMap.get(key))).then()
+        mqttService.publishAttributes('occupancy ' + key,
+            {checkingInToday: await isRoomCheckingInToday(today, occupancyMap.get(key))}).then()
     }
     mqttService.publishAttributes('occupancy phone numbers',
         { state: 'ON', phones: await getAllPhoneNumbersForGuestsTonight(today, finalStays)}).then()
@@ -275,6 +277,17 @@ async function isRoomOccupiedTonight(today, roomStays){
     for (let roomStay of roomStays){
         room = roomStay.room
         if (await compareDates(roomStay.checkin, today) <= 0 && await compareDates(roomStay.checkout, today) > 0){
+            return true
+        }
+    }
+    return false
+}
+
+async function isRoomCheckingInToday(today, roomStays){
+    let room = ''
+    for (let roomStay of roomStays){
+        room = roomStay.room
+        if (await compareDates(roomStay.checkin, today) === 0){
             return true
         }
     }
