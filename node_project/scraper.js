@@ -169,7 +169,6 @@ async function doRun(browser){
     await page.screenshot({ path: 'screenshots/calendar.png' })
     let calendarDays = Array.from(await page.$$('.calendar-day'))
     let roomStays = await scrapeRooms(calendarDays, page)
-    console.log(JSON.stringify(roomStays))
     let today = new Date()
     today.setHours(0)
     today.setMinutes(0)
