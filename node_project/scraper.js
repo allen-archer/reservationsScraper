@@ -181,10 +181,15 @@ async function doRun(browser){
     mqttService.changeDeviceState('Breakfast Guests', breakfastGuests).then()
     let occupancyMap = await createOccupancyMap(roomStays)
     for (let key of occupancyMap.keys()){
-        mqttService.changeDeviceState('occupancy ' + key,
-            await isRoomOccupiedTonight(today, occupancyMap.get(key))).then()
-        mqttService.publishAttributes('occupancy ' + key,
-            {checkingInToday: await isRoomCheckingInToday(today, occupancyMap.get(key))}).then()
+        const occupiedTonight = await isRoomOccupiedTonight(today, occupancyMap.get(key))
+        const checkingInToday = await isRoomCheckingInToday(today, occupancyMap.get(key))
+        mqttService.publishAttributes(
+            'occupancy ' + key,
+            {
+                state: occupiedTonight ? 'ON' : 'OFF',
+                checkingInToday: checkingInToday
+            }
+        ).then()
     }
     mqttService.publishAttributes('occupancy phone numbers',
         { state: 'ON', phones: await getAllPhoneNumbersForGuestsTonight(today, finalStays)}).then()
