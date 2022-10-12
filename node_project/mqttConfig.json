@@ -69,7 +69,8 @@
           "topic": "homeassistant/binary_sensor/occupancy_roomname/available",
           "payload_not_available": "OFFLINE",
           "payload_available": "ONLINE"
-        }
+        },
+        "json_attributes_topic": "homeassistant/sensor/occupancy_roomname/state"
       }
     },
     {
