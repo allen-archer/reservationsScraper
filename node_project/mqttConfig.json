@@ -51,11 +51,11 @@
     },
     {
       "name": "occupancy roomname",
-      "registerTopic": "homeassistant/binary_sensor/occupancy_roomname/config",
+      "registerTopic": "homeassistant/sensor/occupancy_roomname/config",
       "registerMessage": {
         "name": "occupancy roomname",
         "unique_id": "occupancy_roomname_01",
-        "state_topic": "homeassistant/binary_sensor/occupancy_roomname/state",
+        "state_topic": "homeassistant/sensor/occupancy_roomname/state",
         "state_on": "ON",
         "state_off": "OFF",
         "device": {
@@ -66,7 +66,7 @@
           "via_device": "bookitnow"
         },
         "availability": {
-          "topic": "homeassistant/binary_sensor/occupancy_roomname/available",
+          "topic": "homeassistant/sensor/occupancy_roomname/available",
           "payload_not_available": "OFFLINE",
           "payload_available": "ONLINE"
         },
