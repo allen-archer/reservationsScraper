@@ -186,7 +186,7 @@ async function doRun(browser){
         mqttService.publishAttributes(
             'occupancy ' + key,
             {
-                state: occupiedTonight ? 'ON' : 'OFF',
+                occupiedTonight: occupiedTonight,
                 checkingInToday: checkingInToday
             }
         ).then()
