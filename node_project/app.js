@@ -4,7 +4,7 @@ const cron = require('node-cron')
 const { createLogger, format, transports } = require('winston')
 const fs = require('fs')
 const yaml = require('yaml')
-const scraper = require('./scraper')
+const scraper = require('./thinkScraper')
 const frigate = require('./frigate')
 const mqttService = require("./mqttService")
 
@@ -133,24 +133,24 @@ app.get('/scrape', (request, response) => {
     })
 })
 
-app.get('/updateCode', (request, response) => {
-    const query = request.query
-    if (query.confirmationCode){
-        scraper.updateCode(query.confirmationCode)
-            .then(doRun => {
-                if (doRun){
-                    logger.info('Confirmation code updated, scrape process started.')
-                    response.send('Confirmation code updated, scrape process started.')
-                    runScraper().then()
-                } else {
-                    logger.info('Confirmation code updated, but scrape process not started.')
-                    response.send('Confirmation code updated, but scrape process not started.')
-                }
-            })
-    } else {
-        logger.info('No confirmation code, request ignored.')
-        response.send('No confirmation code, request ignored.')
-    }
-})
+// app.get('/updateCode', (request, response) => {
+//     const query = request.query
+//     if (query.confirmationCode){
+//         scraper.updateCode(query.confirmationCode)
+//             .then(doRun => {
+//                 if (doRun){
+//                     logger.info('Confirmation code updated, scrape process started.')
+//                     response.send('Confirmation code updated, scrape process started.')
+//                     runScraper().then()
+//                 } else {
+//                     logger.info('Confirmation code updated, but scrape process not started.')
+//                     response.send('Confirmation code updated, but scrape process not started.')
+//                 }
+//             })
+//     } else {
+//         logger.info('No confirmation code, request ignored.')
+//         response.send('No confirmation code, request ignored.')
+//     }
+// })
 
 initialize().then()
