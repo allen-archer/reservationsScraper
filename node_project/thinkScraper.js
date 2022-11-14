@@ -137,29 +137,13 @@ async function doRun(browser){
         }
     }
     const phoneNumberMap = await combineAllPhoneNumbers(map, secrets)
-    try {
-        mqttService.changeDeviceState('Evening Guests', areEveningGuests).then()
-    } catch (e){
-        logger.error(e)
-    }
-    try {
-        mqttService.changeDeviceState('Breakfast Guests', areBreakfastGuests).then()
-    } catch (e){
-        logger.error(e)
-    }
+    mqttService.changeDeviceState('Evening Guests', areEveningGuests).then()
+    mqttService.changeDeviceState('Breakfast Guests', areBreakfastGuests).then()
     for (const key of occupancyMap.keys()){
-        try {
-            mqttService.publishAttributes('occupancy ' + key, occupancyMap.get(key)).then()
-        } catch (e){
-            logger.error(e)
-        }
+        mqttService.publishAttributes('occupancy ' + key, occupancyMap.get(key)).then()
     }
-    try {
-        mqttService.publishAttributes('occupancy phone numbers',
-            { state: 'ON', phones: Object.fromEntries(phoneNumberMap)}).then()
-    } catch (e){
-        logger.error(e)
-    }
+    mqttService.publishAttributes('occupancy phone numbers',
+        { state: 'ON', phones: Object.fromEntries(phoneNumberMap)}).then()
     const message = await getMessage(map)
     webhook.send(message).then()
 }
