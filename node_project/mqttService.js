@@ -61,13 +61,9 @@ async function createDeviceList(mqttConfig, secrets){
     for (let device of mqttConfig.devices){
         if (device.name === "occupancy roomname"){
             let deviceStr = JSON.stringify(device)
-            for (let roomName of Object.values(secrets.roomNameMap)){
-                if (Array.isArray(roomName)){
-                    logger.info(roomName + ' is array, skipping')
-                } else {
-                    let newDeviceStr = deviceStr.replaceAll('roomname', roomName)
-                    newDevices.push(JSON.parse(newDeviceStr))
-                }
+            for (let roomName of Object.values(secrets.roomNames)){
+                let newDeviceStr = deviceStr.replaceAll('roomname', roomName)
+                newDevices.push(JSON.parse(newDeviceStr))
             }
         } else {
             newDevices.push(device)
