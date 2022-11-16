@@ -52,9 +52,88 @@ async function doRun(browser){
     await page.click('body > div > main > section > div > div > div > form > div:nth-child(4) > button')
     await page.waitForSelector('#app > div > div.application-header > div.component.navigationV2 > ul.navigation-links > li:nth-child(1) > a')
     await page.screenshot({ path: 'screenshots/calendar.png' })
-    await page.click('#app > div > div.application-header > div.component.navigationV2 > ul.navigation-links > li:nth-child(1) > a')
-    await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2')
-    await page.screenshot({path: 'screenshots/frontDesk.png'})
+    const maps = []
+    let date = new Date()
+    for (let i = 0; i < config.daysToCheck; i++){
+        if (i > 0) {
+            date.setDate(date.getDate() + 1)
+        }
+        const url = secrets.frontDeskUrl.replace('{year}', date.getFullYear()).replace('{month}', date.getMonth() + 1).replace('{date}', date.getDate())
+        await page.goto(url)
+        await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2')
+        await page.screenshot({path: `screenshots/frontDesk${i}.png`})
+        maps.push(await getMapForDay(page))
+    }
+    for (const entry of maps[0].get('checkins')){
+        entry.phones = await getPhonesFromLink(page, entry.link)
+    }
+    for (const entry of maps[0].get('stayovers')){
+        entry.phones = await getPhonesFromLink(page, entry.link)
+    }
+    const areEveningGuests = maps[0].get('checkins').length > 0 || maps[0].get('stayovers').length > 0
+    const areBreakfastGuests = maps[0].get('stayovers').length > 0 || maps[0].get('checkouts').length > 0
+    const occupancyMap = new Map()
+    for (const roomName of secrets.roomNames){
+        occupancyMap.set(roomName,
+            {
+                occupiedTonight: false,
+                checkingInToday: false
+            })
+    }
+    for (const entry of maps[0].get('checkins')){
+        const rooms = []
+        if (entry.room.includes('-')){
+            const split = entry.room.split('-')
+            for (const val of split){
+                rooms.push(val)
+            }
+        } else {
+            rooms.push(entry.room)
+        }
+        for (const room of rooms){
+            occupancyMap.get(room).occupiedTonight = true
+            occupancyMap.get(room).checkingInToday = true
+        }
+    }
+    for (const entry of maps[0].get('stayovers')){
+        const rooms = []
+        if (entry.room.includes('-')){
+            const split = entry.room.split('-')
+            for (const val of split){
+                rooms.push(val)
+            }
+        } else {
+            rooms.push(entry.room)
+        }
+        for (const room of rooms){
+            occupancyMap.get(room).occupiedTonight = true
+            occupancyMap.get(room).checkingInToday = false
+        }
+    }
+    const phoneNumberMap = await combineAllPhoneNumbers(maps[0], secrets)
+    mqttService.changeDeviceState('Evening Guests', areEveningGuests).then()
+    mqttService.changeDeviceState('Breakfast Guests', areBreakfastGuests).then()
+    for (const key of occupancyMap.keys()){
+        mqttService.publishAttributes('occupancy ' + key, occupancyMap.get(key)).then()
+    }
+    mqttService.publishAttributes('occupancy phone numbers',
+        { state: 'ON', phones: Object.fromEntries(phoneNumberMap)}).then()
+    const message = await createMessage(new Date(), maps, config.daysToCheck)
+    webhook.send(message).then()
+}
+
+async function getPhonesFromLink(page, link){
+    await page.goto(link)
+    await page.waitForSelector('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-body')
+    const phoneElements = Array.from(await page.$$('.customer-phone > .component > a'))
+    const phones = new Set()
+    for (const phone of phoneElements) {
+        phones.add(await cleanPhone(await getInnerHtml(page, phone)))
+    }
+    return Array.from(phones)
+}
+
+async function getMapForDay(page){
     let map = new Map()
     map.set('checkins', [])
     map.set('checkouts', [])
@@ -73,7 +152,8 @@ async function doRun(browser){
             const entry = {
                 name: await cleanName(await getInnerHtml(page, name)),
                 room: await cleanRoom(await getInnerHtml(page, room)),
-                link: await getLink(page, link)
+                link: await getLink(page, link),
+                notes: {}
             }
             if (type === 1){
                 map.get('checkins').push(entry)
@@ -84,74 +164,26 @@ async function doRun(browser){
             }
         }
     }
-    for (const key of map.keys()){
-        for (const entry of map.get(key)) {
-            page.goto(entry.link)
-            await page.waitForSelector('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-body')
-            const phoneElements = Array.from(await page.$$('.customer-phone > .component > a'))
-            const phones = new Set()
-            for (const phone of phoneElements) {
-                phones.add(await cleanPhone(await getInnerHtml(page, phone)))
-            }
-            entry.phones = Array.from(phones)
-        }
-    }
-    const areEveningGuests = map.get('checkins').length > 0 || map.get('stayovers').length > 0
-    const areBreakfastGuests = map.get('stayovers').length > 0 || map.get('checkouts').length > 0
-    const occupancyMap = new Map()
-    for (const roomName of secrets.roomNames){
-        occupancyMap.set(roomName,
-            {
-                occupiedTonight: false,
-                checkingInToday: false
-            })
-    }
-    for (const entry of map.get('checkins')){
-        const rooms = []
-        if (entry.room.includes('-')){
-            const split = entry.room.split('-')
-            for (const val of split){
-                rooms.push(val)
-            }
-        } else {
-            rooms.push(entry.room)
-        }
-        for (const room of rooms){
-            occupancyMap.get(room).occupiedTonight = true
-            occupancyMap.get(room).checkingInToday = true
-        }
-    }
-    for (const entry of map.get('stayovers')){
-        const rooms = []
-        if (entry.room.includes('-')){
-            const split = entry.room.split('-')
-            for (const val of split){
-                rooms.push(val)
-            }
-        } else {
-            rooms.push(entry.room)
-        }
-        for (const room of rooms){
-            occupancyMap.get(room).occupiedTonight = true
-            occupancyMap.get(room).checkingInToday = false
-        }
-    }
-    const phoneNumberMap = await combineAllPhoneNumbers(map, secrets)
-    mqttService.changeDeviceState('Evening Guests', areEveningGuests).then()
-    mqttService.changeDeviceState('Breakfast Guests', areBreakfastGuests).then()
-    for (const key of occupancyMap.keys()){
-        mqttService.publishAttributes('occupancy ' + key, occupancyMap.get(key)).then()
-    }
-    mqttService.publishAttributes('occupancy phone numbers',
-        { state: 'ON', phones: Object.fromEntries(phoneNumberMap)}).then()
-    const message = await getMessage(map)
-    webhook.send(message).then()
+    return map
 }
 
-async function getMessage(map){
+async function createMessage(today, maps, numberOfDays){
+    let message = ''
+    for (let i = 0; i < numberOfDays; i++){
+        let date = new Date(today)
+        date.setDate(date.getDate() + i)
+        if (i > 0){
+            message += '\n\n'
+        }
+        message += await getMessageForDay(date, maps[i])
+    }
+    return message
+}
+
+async function getMessageForDay(day, map){
     const checkins = map.get('checkins')
     const checkouts = map.get('checkouts')
-    let message = `Checkins:`
+    let message = day.toLocaleString("en", {weekday: "long"}) + ':\n  Checkins:'
     if (checkins.length === 0){
         message += ' NONE'
     } else {
@@ -159,6 +191,28 @@ async function getMessage(map){
             message
                 += '\n    ' + entry.name
                 + '\n      ' + 'Room: ' + entry.room
+                // + '\n      ' + 'Nights: ' + entry.nights
+            if (entry.guest){
+                message += '\n      ' + 'Guest: ' + entry.guest
+            }
+            if (entry.checkinTime){
+                message += '\n      ' + 'Checkin: ' + entry.checkinTime
+            }
+            if (entry.notes.eta){
+                message += '\n      ' + 'ETA: ' + entry.notes.eta
+            }
+            if (entry.notes.dietary){
+                message += '\n      ' + 'Dietary restrictions: ' + entry.notes.dietary
+            }
+            if (entry.notes.guestComments){
+                message += '\n      ' + 'Guest comments: ' + entry.notes.guestComments
+            }
+            if (entry.notes.innkeepersComments){
+                message += '\n      ' + 'Innkeepers comments: ' + entry.notes.innkeepersComments
+            }
+            if (entry.notes.anythingElse){
+                message += '\n      ' + 'Anything else?: ' + entry.notes.anythingElse
+            }
             if (entry.phones){
                 message += '\n      ' + 'Phone: '
                 for (let i = 0; i < entry.phones.length; i++){
@@ -170,18 +224,54 @@ async function getMessage(map){
             }
         }
     }
-    message += 'Checkouts:'
+    message += '\n  Checkouts:'
     if (checkouts.length === 0){
         message += ' NONE'
     } else {
-        for (const entry of checkouts){
+        for (let roomStay of checkouts){
             message
-                += '\n    ' + entry.name
-                + '\n      ' + 'Room: ' + entry.room
+                += '\n    ' + roomStay.name
+                // + '\n      ' + 'Room: ' + roomStay.room
+                // + '\n      ' + 'Due: ' + roomStay.amount
         }
     }
     return message
 }
+
+// async function getMessage(map){
+//     const checkins = map.get('checkins')
+//     const checkouts = map.get('checkouts')
+//     let message = `Checkins:`
+//     if (checkins.length === 0){
+//         message += ' NONE'
+//     } else {
+//         for (const entry of checkins){
+//             message
+//                 += '\n    ' + entry.name
+//                 + '\n      ' + 'Room: ' + entry.room
+//             if (entry.phones){
+//                 message += '\n      ' + 'Phone: '
+//                 for (let i = 0; i < entry.phones.length; i++){
+//                     if (i > 0){
+//                         message += ', '
+//                     }
+//                     message += entry.phones[i]
+//                 }
+//             }
+//         }
+//     }
+//     message += '\nCheckouts:'
+//     if (checkouts.length === 0){
+//         message += ' NONE'
+//     } else {
+//         for (const entry of checkouts){
+//             message
+//                 += '\n    ' + entry.name
+//                 + '\n      ' + 'Room: ' + entry.room
+//         }
+//     }
+//     return message
+// }
 
 async function combineAllPhoneNumbers(map, secrets){
     const phoneNumberMap = new Map()
