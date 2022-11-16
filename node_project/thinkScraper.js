@@ -52,52 +52,26 @@ async function doRun(browser){
     await page.click('body > div > main > section > div > div > div > form > div:nth-child(4) > button')
     await page.waitForSelector('#app > div > div.application-header > div.component.navigationV2 > ul.navigation-links > li:nth-child(1) > a')
     await page.screenshot({ path: 'screenshots/calendar.png' })
-    await page.click('#app > div > div.application-header > div.component.navigationV2 > ul.navigation-links > li:nth-child(1) > a')
-    await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2')
-    await page.screenshot({path: 'screenshots/frontDesk.png'})
-    let map = new Map()
-    map.set('checkins', [])
-    map.set('checkouts', [])
-    map.set('stayovers', [])
-    for (let type = 1; type < 4; type++){
-        let row = 3
-        while (true) {
-            const name = await page.$(`#app > div > div.application-body > div > table > tbody:nth-child(${type}) > tr:nth-child(${row}) > td:nth-child(2)`)
-            if (name === undefined || name === null) {
-                // Reached the end of the available rows
-                break
-            }
-            const link = await page.$(`#app > div > div.application-body > div > table > tbody:nth-child(${type}) > tr:nth-child(${row}) > td.booking-confirmation-id > a`)
-            const room = await page.$(`#app > div > div.application-body > div > table > tbody:nth-child(${type}) > tr:nth-child(${row}) > td:nth-child(4)`)
-            row++
-            const entry = {
-                name: await cleanName(await getInnerHtml(page, name)),
-                room: await cleanRoom(await getInnerHtml(page, room)),
-                link: await getLink(page, link)
-            }
-            if (type === 1){
-                map.get('checkins').push(entry)
-            } else if (type === 2){
-                map.get('checkouts').push(entry)
-            } else {
-                map.get('stayovers').push(entry)
-            }
+    const maps = []
+    let date = new Date()
+    for (let i = 0; i < config.daysToCheck; i++){
+        if (i > 0) {
+            date.setDate(date.getDate() + 1)
         }
+        const url = secrets.frontDeskUrl.replace('{year}', date.getFullYear()).replace('{month}', date.getMonth() + 1).replace('{date}', date.getDate())
+        await page.goto(url)
+        await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2')
+        await page.screenshot({path: `screenshots/frontDesk${i}.png`})
+        maps.push(await getMapForDay(page))
     }
-    for (const key of map.keys()){
-        for (const entry of map.get(key)) {
-            page.goto(entry.link)
-            await page.waitForSelector('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-body')
-            const phoneElements = Array.from(await page.$$('.customer-phone > .component > a'))
-            const phones = new Set()
-            for (const phone of phoneElements) {
-                phones.add(await cleanPhone(await getInnerHtml(page, phone)))
-            }
-            entry.phones = Array.from(phones)
-        }
+    for (const entry of maps[0].get('checkins')){
+        entry.phones = await getPhonesFromLink(page, entry.link)
     }
-    const areEveningGuests = map.get('checkins').length > 0 || map.get('stayovers').length > 0
-    const areBreakfastGuests = map.get('stayovers').length > 0 || map.get('checkouts').length > 0
+    for (const entry of maps[0].get('stayovers')){
+        entry.phones = await getPhonesFromLink(page, entry.link)
+    }
+    const areEveningGuests = maps[0].get('checkins').length > 0 || maps[0].get('stayovers').length > 0
+    const areBreakfastGuests = maps[0].get('stayovers').length > 0 || maps[0].get('checkouts').length > 0
     const occupancyMap = new Map()
     for (const roomName of secrets.roomNames){
         occupancyMap.set(roomName,
@@ -106,7 +80,7 @@ async function doRun(browser){
                 checkingInToday: false
             })
     }
-    for (const entry of map.get('checkins')){
+    for (const entry of maps[0].get('checkins')){
         const rooms = []
         if (entry.room.includes('-')){
             const split = entry.room.split('-')
@@ -121,7 +95,7 @@ async function doRun(browser){
             occupancyMap.get(room).checkingInToday = true
         }
     }
-    for (const entry of map.get('stayovers')){
+    for (const entry of maps[0].get('stayovers')){
         const rooms = []
         if (entry.room.includes('-')){
             const split = entry.room.split('-')
@@ -136,7 +110,7 @@ async function doRun(browser){
             occupancyMap.get(room).checkingInToday = false
         }
     }
-    const phoneNumberMap = await combineAllPhoneNumbers(map, secrets)
+    const phoneNumberMap = await combineAllPhoneNumbers(maps[0], secrets)
     mqttService.changeDeviceState('Evening Guests', areEveningGuests).then()
     mqttService.changeDeviceState('Breakfast Guests', areBreakfastGuests).then()
     for (const key of occupancyMap.keys()){
@@ -144,14 +118,78 @@ async function doRun(browser){
     }
     mqttService.publishAttributes('occupancy phone numbers',
         { state: 'ON', phones: Object.fromEntries(phoneNumberMap)}).then()
-    const message = await getMessage(map)
+    const message = await createMessage(new Date(), maps, config.daysToCheck)
     webhook.send(message).then()
 }
 
-async function getMessage(map){
+async function getPhonesFromLink(page, link){
+    await page.goto(link)
+    await page.waitForSelector('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-body')
+    const phoneElements = Array.from(await page.$$('.customer-phone > .component > a'))
+    const phones = new Set()
+    for (const phone of phoneElements) {
+        phones.add(await cleanPhone(await getInnerHtml(page, phone)))
+    }
+    return Array.from(phones)
+}
+
+async function getMapForDay(page){
+    let map = new Map()
+    map.set('checkins', [])
+    map.set('checkouts', [])
+    map.set('stayovers', [])
+    for (let type = 1; type < 4; type++){
+        let row = 3
+        while (true) {
+            const rowElement = await page.$(`#app > div > div.application-body > div > table > tbody:nth-child(${type}) > tr:nth-child(${row})`)
+            if (rowElement === undefined || rowElement === null) {
+                // Reached the end of the available rows
+                break
+            }
+            const name = await rowElement.$(`td:nth-child(2)`)
+            const link = await rowElement.$(`td.booking-confirmation-id > a`)
+            const room = await rowElement.$(`td:nth-child(4)`)
+            const nights = await rowElement.$(`td:nth-child(5)`)
+            const paid = await rowElement.$(`td:nth-child(6)`)
+            const notes = Array.from(await rowElement.$$(`td:nth-child(7) > div > div`))
+            row++
+            const entry = {
+                name: await cleanName(await getInnerHtml(page, name)),
+                room: await cleanRoom(await getInnerHtml(page, room)),
+                nights: await cleanNights(await getInnerHtml(page, nights)),
+                amount: await cleanPaid(await getInnerHtml(page, paid)),
+                link: await getLink(page, link),
+                notes: await cleanNotes(page, notes)
+            }
+            if (type === 1){
+                map.get('checkins').push(entry)
+            } else if (type === 2){
+                map.get('checkouts').push(entry)
+            } else {
+                map.get('stayovers').push(entry)
+            }
+        }
+    }
+    return map
+}
+
+async function createMessage(today, maps, numberOfDays){
+    let message = ''
+    for (let i = 0; i < numberOfDays; i++){
+        let date = new Date(today)
+        date.setDate(date.getDate() + i)
+        if (i > 0){
+            message += '\n\n'
+        }
+        message += await getMessageForDay(date, maps[i])
+    }
+    return message
+}
+
+async function getMessageForDay(day, map){
     const checkins = map.get('checkins')
     const checkouts = map.get('checkouts')
-    let message = `Checkins:`
+    let message = day.toLocaleString("en", {weekday: "long"}) + ':\n  Checkins:'
     if (checkins.length === 0){
         message += ' NONE'
     } else {
@@ -159,6 +197,13 @@ async function getMessage(map){
             message
                 += '\n    ' + entry.name
                 + '\n      ' + 'Room: ' + entry.room
+                + '\n      ' + 'Nights: ' + entry.nights
+            if (entry.guest){
+                message += '\n      ' + 'Guest: ' + entry.guest
+            }
+            if (entry.notes){
+                message += entry.notes
+            }
             if (entry.phones){
                 message += '\n      ' + 'Phone: '
                 for (let i = 0; i < entry.phones.length; i++){
@@ -170,7 +215,7 @@ async function getMessage(map){
             }
         }
     }
-    message += 'Checkouts:'
+    message += '\n  Checkouts:'
     if (checkouts.length === 0){
         message += ' NONE'
     } else {
@@ -178,6 +223,7 @@ async function getMessage(map){
             message
                 += '\n    ' + entry.name
                 + '\n      ' + 'Room: ' + entry.room
+                + '\n      ' + 'Due: ' + entry.amount
         }
     }
     return message
@@ -211,12 +257,37 @@ async function cleanPhone(phone){
 
 async function cleanName(name){
     const split = name.split(', ')
-    return `${split[0]} ${split[1]}`
+    return `${split[1]} ${split[0]}`
 }
 
 async function cleanRoom(room){
     const split = room.split(' ')
     return split[0]
+}
+
+async function cleanNights(nights){
+    const split = nights.split(' ')
+    return split[2]
+}
+
+async function cleanPaid(paid){
+    if (paid.includes('Yes')){
+        return '$0.00'
+    } else {
+        const split = paid.split(' ')
+        return split[2]
+    }
+}
+
+async function cleanNotes(page, notes){
+    let message = ''
+    for (const note of notes){
+        const innerHtml = await getInnerHtml(page, note)
+        const split = innerHtml.split('</strong>')
+        message += '\n      ' + split[0].replace('<strong>', '')
+        message += '\n        ' + split[1]
+    }
+    return message
 }
 
 async function getInnerHtml(page, element){
