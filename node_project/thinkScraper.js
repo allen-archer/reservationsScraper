@@ -141,19 +141,25 @@ async function getMapForDay(page){
     for (let type = 1; type < 4; type++){
         let row = 3
         while (true) {
-            const name = await page.$(`#app > div > div.application-body > div > table > tbody:nth-child(${type}) > tr:nth-child(${row}) > td:nth-child(2)`)
-            if (name === undefined || name === null) {
+            const rowElement = await page.$(`#app > div > div.application-body > div > table > tbody:nth-child(${type}) > tr:nth-child(${row})`)
+            if (rowElement === undefined || rowElement === null) {
                 // Reached the end of the available rows
                 break
             }
-            const link = await page.$(`#app > div > div.application-body > div > table > tbody:nth-child(${type}) > tr:nth-child(${row}) > td.booking-confirmation-id > a`)
-            const room = await page.$(`#app > div > div.application-body > div > table > tbody:nth-child(${type}) > tr:nth-child(${row}) > td:nth-child(4)`)
+            const name = await rowElement.$(`td:nth-child(2)`)
+            const link = await rowElement.$(`td.booking-confirmation-id > a`)
+            const room = await rowElement.$(`td:nth-child(4)`)
+            const nights = await rowElement.$(`td:nth-child(5)`)
+            const paid = await rowElement.$(`td:nth-child(6)`)
+            const notes = Array.from(await rowElement.$$(`td:nth-child(7) > div > div`))
             row++
             const entry = {
                 name: await cleanName(await getInnerHtml(page, name)),
                 room: await cleanRoom(await getInnerHtml(page, room)),
+                nights: await cleanNights(await getInnerHtml(page, nights)),
+                amount: await cleanPaid(await getInnerHtml(page, paid)),
                 link: await getLink(page, link),
-                notes: {}
+                notes: await cleanNotes(page, notes)
             }
             if (type === 1){
                 map.get('checkins').push(entry)
@@ -191,27 +197,12 @@ async function getMessageForDay(day, map){
             message
                 += '\n    ' + entry.name
                 + '\n      ' + 'Room: ' + entry.room
-                // + '\n      ' + 'Nights: ' + entry.nights
+                + '\n      ' + 'Nights: ' + entry.nights
             if (entry.guest){
                 message += '\n      ' + 'Guest: ' + entry.guest
             }
-            if (entry.checkinTime){
-                message += '\n      ' + 'Checkin: ' + entry.checkinTime
-            }
-            if (entry.notes.eta){
-                message += '\n      ' + 'ETA: ' + entry.notes.eta
-            }
-            if (entry.notes.dietary){
-                message += '\n      ' + 'Dietary restrictions: ' + entry.notes.dietary
-            }
-            if (entry.notes.guestComments){
-                message += '\n      ' + 'Guest comments: ' + entry.notes.guestComments
-            }
-            if (entry.notes.innkeepersComments){
-                message += '\n      ' + 'Innkeepers comments: ' + entry.notes.innkeepersComments
-            }
-            if (entry.notes.anythingElse){
-                message += '\n      ' + 'Anything else?: ' + entry.notes.anythingElse
+            if (entry.notes){
+                message += entry.notes
             }
             if (entry.phones){
                 message += '\n      ' + 'Phone: '
@@ -228,50 +219,15 @@ async function getMessageForDay(day, map){
     if (checkouts.length === 0){
         message += ' NONE'
     } else {
-        for (let roomStay of checkouts){
+        for (const entry of checkouts){
             message
-                += '\n    ' + roomStay.name
-                // + '\n      ' + 'Room: ' + roomStay.room
-                // + '\n      ' + 'Due: ' + roomStay.amount
+                += '\n    ' + entry.name
+                + '\n      ' + 'Room: ' + entry.room
+                + '\n      ' + 'Due: ' + entry.amount
         }
     }
     return message
 }
-
-// async function getMessage(map){
-//     const checkins = map.get('checkins')
-//     const checkouts = map.get('checkouts')
-//     let message = `Checkins:`
-//     if (checkins.length === 0){
-//         message += ' NONE'
-//     } else {
-//         for (const entry of checkins){
-//             message
-//                 += '\n    ' + entry.name
-//                 + '\n      ' + 'Room: ' + entry.room
-//             if (entry.phones){
-//                 message += '\n      ' + 'Phone: '
-//                 for (let i = 0; i < entry.phones.length; i++){
-//                     if (i > 0){
-//                         message += ', '
-//                     }
-//                     message += entry.phones[i]
-//                 }
-//             }
-//         }
-//     }
-//     message += '\nCheckouts:'
-//     if (checkouts.length === 0){
-//         message += ' NONE'
-//     } else {
-//         for (const entry of checkouts){
-//             message
-//                 += '\n    ' + entry.name
-//                 + '\n      ' + 'Room: ' + entry.room
-//         }
-//     }
-//     return message
-// }
 
 async function combineAllPhoneNumbers(map, secrets){
     const phoneNumberMap = new Map()
@@ -301,12 +257,37 @@ async function cleanPhone(phone){
 
 async function cleanName(name){
     const split = name.split(', ')
-    return `${split[0]} ${split[1]}`
+    return `${split[1]} ${split[0]}`
 }
 
 async function cleanRoom(room){
     const split = room.split(' ')
     return split[0]
+}
+
+async function cleanNights(nights){
+    const split = nights.split(' ')
+    return split[2]
+}
+
+async function cleanPaid(paid){
+    if (paid.includes('Yes')){
+        return '$0.00'
+    } else {
+        const split = paid.split(' ')
+        return split[2]
+    }
+}
+
+async function cleanNotes(page, notes){
+    let message = ''
+    for (const note of notes){
+        const innerHtml = await getInnerHtml(page, note)
+        const split = innerHtml.split('</strong>')
+        message += '\n      ' + split[0].replace('<strong>', '')
+        message += '\n        ' + split[1]
+    }
+    return message
 }
 
 async function getInnerHtml(page, element){
