@@ -53,14 +53,20 @@ async function doRun(browser){
     await page.waitForSelector('#app > div > div.application-header > div.component.navigationV2 > ul.navigation-links > li:nth-child(1) > a')
     await page.screenshot({ path: 'screenshots/calendar.png' })
     const maps = []
+    await page.click('#app > div > div.application-header > div.component.navigationV2 > ul.navigation-links > li:nth-child(1) > a')
+    await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2')
     let date = new Date()
     for (let i = 0; i < config.daysToCheck; i++){
         if (i > 0) {
             date.setDate(date.getDate() + 1)
+            const month = date.toLocaleString('en-US', { month: 'short' });
+            const dateString = `${month} ${date.getDate()}, ${date.getFullYear()}`
+            const dateInput = await page.$('#date_input_input')
+            await dateInput.click({ clickCount: 3 }) // click 3 times to select all text
+            await dateInput.type(dateString) // to then overwrite that text
+            await page.click('#app > div > div.application-body > div > div.component.front-desk-form > form > div.component.button > button')
+            await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2')
         }
-        const url = secrets.frontDeskUrl.replace('{year}', date.getFullYear()).replace('{month}', date.getMonth() + 1).replace('{date}', date.getDate())
-        await page.goto(url)
-        await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2')
         await page.screenshot({path: `screenshots/frontDesk${i}.png`})
         maps.push(await getMapForDay(page))
     }
