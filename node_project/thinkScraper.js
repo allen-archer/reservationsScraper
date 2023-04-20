@@ -70,10 +70,16 @@ async function doRun(browser){
         await page.screenshot({path: `screenshots/frontDesk${i}.png`})
         maps.push(await getMapForDay(page))
     }
-    for (const entry of maps[0].get('checkins')){
-        entry.phones = await getPhonesFromLink(page, entry.link)
+    for (let i = 0; i < config.daysToCheck; i++) {
+        for (const entry of maps[i].get('checkins')) {
+            const phonesAndPreviousStays = await getPhonesAndPreviousStaysFromLink(page, entry.link)
+            if (i === 0) {
+                entry.phones = phonesAndPreviousStays.phones
+            }
+            entry.previousStays = phonesAndPreviousStays.previousStays
+        }
     }
-    for (const entry of maps[0].get('stayovers')){
+    for (const entry of maps[0].get('stayovers')) {
         entry.phones = await getPhonesFromLink(page, entry.link)
     }
     const areEveningGuests = maps[0].get('checkins').length > 0 || maps[0].get('stayovers').length > 0
@@ -124,8 +130,17 @@ async function doRun(browser){
     }
     mqttService.publishAttributes('occupancy phone numbers',
         { state: 'ON', phones: Object.fromEntries(phoneNumberMap)}).then()
-    const message = await createMessage(new Date(), maps, config.daysToCheck)
-    webhook.send(message).then()
+    const messages = await createMessages(new Date(), maps, config.daysToCheck)
+    for (const message of messages){
+        await webhook.send(message)
+    }
+}
+
+async function getPhonesAndPreviousStaysFromLink(page, link){
+    return {
+        phones: await getPhonesFromLink(page, link),
+        previousStays: await getPreviousStays(page)
+    }
 }
 
 async function getPhonesFromLink(page, link){
@@ -137,6 +152,44 @@ async function getPhonesFromLink(page, link){
         phones.add(await cleanPhone(await getInnerHtml(page, phone)))
     }
     return Array.from(phones)
+}
+
+async function getPreviousStays(page){
+    const date = new Date()
+    await page.click('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-header > div.customer-area > div.component.customer-name.small.has-link > a')
+    await page.waitForSelector('#app > div > div.application-body > iframe')
+    const frame = await page.$('#app > div > div.application-body > iframe')
+    const frameContents = await frame.contentFrame()
+    await frameContents.waitForSelector('.component.bill-list > table > tbody')
+    const table = await frameContents.$('.component.bill-list > table > tbody')
+    if (table === null){
+        return 'Error with table'
+    }
+    const rows = await table.$$('tr')
+    let staysMessage = ''
+    let lastStayFound = false
+    let previousStaysCount = 0
+    for (const row of rows){
+        const roomName = await cleanRoom(await getInnerHtml(frameContents, await row.$('td:nth-child(4) > a > div')))
+        const arrivalString = await getInnerHtml(frameContents, await row.$('td:nth-child(5) > a > div'))
+        const departureString = await getInnerHtml(frameContents, await row.$('td:nth-child(6) > a > div'))
+        const timestamp = Date.parse(departureString)
+        if (!isNaN(timestamp)){
+            const departure = new Date(timestamp)
+            if (departure < date){
+                previousStaysCount++
+                if (lastStayFound === false){
+                    lastStayFound = true
+                    staysMessage += `# previous stays, last on ${arrivalString}-${departureString} in ${roomName}`
+                }
+            }
+        }
+    }
+    if (previousStaysCount > 0){
+        return staysMessage.replace('#', previousStaysCount)
+    } else {
+        return 'First time guest'
+    }
 }
 
 async function getMapForDay(page){
@@ -179,17 +232,14 @@ async function getMapForDay(page){
     return map
 }
 
-async function createMessage(today, maps, numberOfDays){
-    let message = ''
+async function createMessages(today, maps, numberOfDays){
+    let messages = []
     for (let i = 0; i < numberOfDays; i++){
         let date = new Date(today)
         date.setDate(date.getDate() + i)
-        if (i > 0){
-            message += '\n\n'
-        }
-        message += await getMessageForDay(date, maps[i])
+        messages.push(await getMessageForDay(date, maps[i]))
     }
-    return message
+    return messages
 }
 
 async function getMessageForDay(day, map){
@@ -206,6 +256,9 @@ async function getMessageForDay(day, map){
                 + '\n      ' + 'Nights: ' + entry.nights
             if (entry.guest){
                 message += '\n      ' + 'Guest: ' + entry.guest
+            }
+            if (entry.previousStays){
+                message += '\n      ' + entry.previousStays
             }
             if (entry.notes){
                 message += entry.notes
