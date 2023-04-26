@@ -64,7 +64,7 @@ async function doRun(browser){
             const dateInput = await page.$('#date_input_input')
             await dateInput.click({ clickCount: 3 }) // click 3 times to select all text
             await dateInput.type(dateString) // to then overwrite that text
-            await page.click('#app > div > div.application-body > div > div.component.front-desk-form > form > div.component.button > button')
+            await page.click('#app > div > div.application-body > div > div.component.front-desk-form > form > div.component.tr-button.presentation-standard.precedence-primary > button > div > div')
             await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2')
         }
         await page.screenshot({path: `screenshots/frontDesk${i}.png`})
