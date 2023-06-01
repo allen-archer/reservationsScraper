@@ -47,9 +47,10 @@ async function doRun(browser){
     await page.goto(secrets.loginUrl)
     await page.type('#username', secrets.username)
     await page.type('#password', secrets.password)
-    await page.waitForSelector('body > div > main > section > div > div > div > form > div:nth-child(4) > button')
+    await page.waitForXPath('/html/body/div[1]/main/section/div/div/div/form/div[3]/button')
     await page.screenshot({ path: 'screenshots/login.png' })
-    await page.click('body > div > main > section > div > div > div > form > div:nth-child(4) > button')
+    const button = await page.$x('/html/body/div[1]/main/section/div/div/div/form/div[3]/button')
+    await button[0].click()
     await page.waitForSelector('#app > div > div.application-header > div.component.navigationV2 > ul.navigation-links > li:nth-child(1) > a')
     await page.screenshot({ path: 'screenshots/calendar.png' })
     const maps = []
