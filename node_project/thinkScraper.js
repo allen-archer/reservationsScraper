@@ -51,10 +51,10 @@ async function doRun(browser){
     await page.screenshot({ path: 'screenshots/login.png' })
     const button = await page.$x('/html/body/div[1]/main/section/div/div/div/form/div[3]/button')
     await button[0].click()
-    await page.waitForSelector('#app > div > div.application-header > div.component.navigationV2 > ul.navigation-links > li:nth-child(1) > a')
+    await page.waitForSelector('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a')
     await page.screenshot({ path: 'screenshots/calendar.png' })
     const maps = []
-    await page.click('#app > div > div.application-header > div.component.navigationV2 > ul.navigation-links > li:nth-child(1) > a')
+    await page.click('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a')
     await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2')
     let date = new Date()
     for (let i = 0; i < config.daysToCheck; i++){
