@@ -1,17 +1,26 @@
 const puppeteer = require('puppeteer')
-const {Webhook} = require("discord-webhook-node");
+const { Webhook, EmbedBuilder } = require('@tycrek/discord-hookr');
 const mqttService = require("./mqttService");
 
 let config
 let secrets
 let logger
-let webhook
+
+const embedColors = [
+    '#97A88E',
+    '#B2222A',
+    '#EF9D7F',
+    '#027978',
+    '#F9DBA5',
+    '#6E2250',
+    '#332823'
+]
+let embedIndex = 0
 
 async function initialize(_config, _secrets, _logger){
     config = _config
     secrets = _secrets
     logger = _logger
-    webhook = new Webhook(secrets.scraper.webhook)
 }
 
 async function runScraper(){
@@ -133,16 +142,18 @@ async function doRun(browser){
         { state: 'ON', phones: Object.fromEntries(phoneNumberMap)}).then()
     const messages = await createMessages(new Date(), maps, config.daysToCheck)
     for (const message of messages){
-        await truncateAndSendMessage(message)
+        const webhook = new Webhook(secrets.scraper.webhook)
+        webhook.setContent(message.content)
+        webhook.addEmbed(message.embeds)
+        await webhook.send()
     }
 }
 
-async function truncateAndSendMessage(message){
-    if (message.length >= 1995){  // Max length is 2000, just giving some wiggle room.
-        logger.info(`Message too long.  Only first 2000 characters sent to Discord.  Whole message = ${message}`)
-        message = message.slice(0, 1980) + '...TRUNCATED'
+function getNextEmbedColor(){
+    if (embedIndex >= embedColors.length){
+        embedIndex = 0
     }
-    await webhook.send(message)
+    return embedColors[embedIndex++]
 }
 
 async function getPhonesAndPreviousStaysFromLink(page, link){
@@ -254,44 +265,57 @@ async function createMessages(today, maps, numberOfDays){
 async function getMessageForDay(day, map){
     const checkins = map.get('checkins')
     const checkouts = map.get('checkouts')
-    let message = day.toLocaleString("en", {weekday: "long"}) + ':\n  Checkins:'
+    const message = {
+        content: `__**${day.toLocaleString("en", {weekday: "long"})}**__`,
+        embeds: []
+    }
     if (checkins.length === 0){
-        message += ' NONE'
+        const embed = new EmbedBuilder()
+            .setDescription(':inbox_tray: :x:')
+            .setColor(getNextEmbedColor())
+        message.embeds.push(embed)
     } else {
         for (const entry of checkins){
-            message
-                += '\n    ' + entry.name
-                + '\n      ' + 'Room: ' + entry.room
-                + '\n      ' + 'Nights: ' + entry.nights
+            const embed = new EmbedBuilder()
+                .setDescription(`:inbox_tray: ${entry.name} :inbox_tray:`)
+                .setFooter({text: entry.previousStays})
+                .addField({name: 'Room', value: entry.room, inline: true})
+                .addField({name: 'Nights', value: entry.nights, inline: true})
+                .setColor(getNextEmbedColor())
             if (entry.guest){
-                message += '\n      ' + 'Guest: ' + entry.guest
-            }
-            if (entry.previousStays){
-                message += '\n      ' + entry.previousStays
+                embed.addField({name: 'Additional Guest Names', value: entry.guest, inline: false})
             }
             if (entry.notes){
-                message += entry.notes
-            }
-            if (entry.phones){
-                message += '\n      ' + 'Phone: '
-                for (let i = 0; i < entry.phones.length; i++){
-                    if (i > 0){
-                        message += ', '
-                    }
-                    message += entry.phones[i]
+                for (const note of entry.notes) {
+                    embed.addField({name: note.name, value: note.value, inline: false})
                 }
             }
+            if (entry.phones){
+                let phones = ''
+                for (let i = 0; i < entry.phones.length; i++){
+                    if (i > 0){
+                        phones += ', '
+                    }
+                    phones += entry.phones[i]
+                }
+                embed.addField({name: 'Phone', value: phones, inline: false})
+            }
+            message.embeds.push(embed)
         }
     }
-    message += '\n  Checkouts:'
     if (checkouts.length === 0){
-        message += ' NONE'
+        const embed = new EmbedBuilder()
+            .setDescription(':outbox_tray: :x:')
+            .setColor(getNextEmbedColor())
+        message.embeds.push(embed)
     } else {
         for (const entry of checkouts){
-            message
-                += '\n    ' + entry.name
-                + '\n      ' + 'Room: ' + entry.room
-                + '\n      ' + 'Due: ' + entry.amount
+            const embed = new EmbedBuilder()
+                .setDescription(`:outbox_tray: ${entry.name} :outbox_tray:`)
+                .addField({name: 'Room', value: entry.room, inline: true})
+                .addField({name: 'Due', value: entry.amount, inline: true})
+                .setColor(getNextEmbedColor())
+            message.embeds.push(embed)
         }
     }
     return message
@@ -349,14 +373,16 @@ async function cleanPaid(paid){
 }
 
 async function cleanNotes(page, notes){
-    let message = ''
+    const cleanedNotes = []
     for (const note of notes){
         const innerHtml = await getInnerHtml(page, note)
         const split = innerHtml.split('</strong>')
-        message += '\n      ' + split[0].replace('<strong>', '')
-        message += '\n        ' + split[1]
+        cleanedNotes.push({
+            name: split[0].replace('<strong>', ''),
+            value: split[1]
+        })
     }
-    return message
+    return cleanedNotes
 }
 
 async function getInnerHtml(page, element){
