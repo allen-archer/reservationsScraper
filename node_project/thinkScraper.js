@@ -324,7 +324,8 @@ async function cleanPhone(phone){
 }
 
 async function cleanName(name){
-    const split = name.split(', ')
+    const nameSansHtml = name.replaceAll(/<[^>]*>/g, ``)
+    const split = nameSansHtml.split(', ')
     return `${split[1]} ${split[0]}`
 }
 
