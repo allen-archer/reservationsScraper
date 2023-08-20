@@ -133,8 +133,16 @@ async function doRun(browser){
         { state: 'ON', phones: Object.fromEntries(phoneNumberMap)}).then()
     const messages = await createMessages(new Date(), maps, config.daysToCheck)
     for (const message of messages){
-        await webhook.send(message)
+        await truncateAndSendMessage(message)
     }
+}
+
+async function truncateAndSendMessage(message){
+    if (message.length >= 1995){  // Max length is 2000, just giving some wiggle room.
+        logger.info(`Message too long.  Only first 2000 characters sent to Discord.  Whole message = ${message}`)
+        message = message.slice(0, 1980) + '...TRUNCATED'
+    }
+    await webhook.send(message)
 }
 
 async function getPhonesAndPreviousStaysFromLink(page, link){
