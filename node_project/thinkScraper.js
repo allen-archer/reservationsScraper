@@ -54,17 +54,29 @@ async function runScraper(){
 async function doRun(browser){
     const page = await browser.newPage()
     await page.goto(secrets.loginUrl)
+    try {
+        await page.waitForXPath('/html/body/div[1]/main/section/div/div/div/form/div[3]/button')
+    } catch (e) {
+        throw 'Selector for login button failed'
+    }
     await page.type('#username', secrets.username)
     await page.type('#password', secrets.password)
-    await page.waitForXPath('/html/body/div[1]/main/section/div/div/div/form/div[3]/button')
     await page.screenshot({ path: 'screenshots/login.png' })
     const button = await page.$x('/html/body/div[1]/main/section/div/div/div/form/div[3]/button')
     await button[0].click()
-    await page.waitForSelector('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a')
+    try {
+        await page.waitForSelector('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a')
+    } catch (e) {
+        throw 'Selector for Front Desk link on Calendar page failed'
+    }
     await page.screenshot({ path: 'screenshots/calendar.png' })
     const maps = []
     await page.click('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a')
-    await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2')
+    try {
+        await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2')
+    } catch (e) {
+        throw 'Selector for Arrivals header on Front Desk page first iteration failed'
+    }
     let date = new Date()
     for (let i = 0; i < config.daysToCheck; i++){
         if (i > 0) {
@@ -75,7 +87,11 @@ async function doRun(browser){
             await dateInput.click({ clickCount: 3 }) // click 3 times to select all text
             await dateInput.type(dateString) // to then overwrite that text
             await page.click('#app > div > div.application-body > div > div.component.front-desk-form > form > div.component.tr-button.presentation-standard.precedence-primary > button > div > div')
-            await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2')
+            try {
+                await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2')
+            } catch (e) {
+                throw 'Selector for Arrivals header on Front Desk page second iteration failed'
+            }
         }
         await page.screenshot({path: `screenshots/frontDesk${i}.png`})
         maps.push(await getMapForDay(page))
@@ -165,7 +181,12 @@ async function getPhonesAndPreviousStaysFromLink(page, link){
 
 async function getPhonesFromLink(page, link){
     await page.goto(link)
-    await page.waitForSelector('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-body')
+    try {
+        await page.waitForSelector('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-body')
+    } catch (e) {
+        logger.error('Selector for Phone Numbers failed')
+        return ['ERROR']
+    }
     const phoneElements = Array.from(await page.$$('.customer-phone > .component > a'))
     const phones = new Set()
     for (const phone of phoneElements) {
@@ -177,22 +198,25 @@ async function getPhonesFromLink(page, link){
 async function getPreviousStays(page){
     const date = new Date()
     await page.click('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-header > div.customer-area > div.component.customer-name.small.has-link > a')
-    await page.waitForSelector('#app > div > div.application-body > iframe')
-    const frame = await page.$('#app > div > div.application-body > iframe')
-    const frameContents = await frame.contentFrame()
-    await frameContents.waitForSelector('.component.bill-list > table > tbody')
-    const table = await frameContents.$('.component.bill-list > table > tbody')
+    try {
+        await page.waitForSelector('#app > div > div.application-body > div > div.customer-details-page-body > div > div > table > tbody')
+    } catch (e) {
+        logger.error('Wait for selector failed on previous stays table')
+        return 'ERROR'
+    }
+    const table = await page.$('#app > div > div.application-body > div > div.customer-details-page-body > div > div > table > tbody')
     if (table === null){
-        return 'Error with table'
+        logger.error('Table null for previous stays')
+        return 'ERROR'
     }
     const rows = await table.$$('tr')
     let staysMessage = ''
     let lastStayFound = false
     let previousStaysCount = 0
     for (const row of rows){
-        const roomName = await cleanRoom(await getInnerHtml(frameContents, await row.$('td:nth-child(4) > a > div')))
-        const arrivalString = await getInnerHtml(frameContents, await row.$('td:nth-child(5) > a > div'))
-        const departureString = await getInnerHtml(frameContents, await row.$('td:nth-child(6) > a > div'))
+        const roomName = await cleanRoom(await getInnerHtml(table, await row.$('td:nth-child(4) > a > div')))
+        const arrivalString = await getInnerHtml(table, await row.$('td:nth-child(5) > a > div'))
+        const departureString = await getInnerHtml(table, await row.$('td:nth-child(6) > a > div'))
         const timestamp = Date.parse(departureString)
         if (!isNaN(timestamp)){
             const departure = new Date(timestamp)
