@@ -125,6 +125,10 @@ async function doRun(browser){
             for (const val of split){
                 rooms.push(val)
             }
+        } else if (entry.room.toLowerCase().includes('whole')) {
+            for (const val of secrets.roomNames) {
+                rooms.push(val);
+            }
         } else {
             rooms.push(entry.room)
         }
@@ -139,6 +143,10 @@ async function doRun(browser){
             const split = entry.room.split('-')
             for (const val of split){
                 rooms.push(val)
+            }
+        } else if (entry.room.toLowerCase().includes('whole')) {
+            for (const val of secrets.roomNames) {
+                rooms.push(val);
             }
         } else {
             rooms.push(entry.room)
