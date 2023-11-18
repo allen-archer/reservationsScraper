@@ -222,9 +222,9 @@ async function getPreviousStays(page){
     let lastStayFound = false
     let previousStaysCount = 0
     for (const row of rows){
-        const roomName = await cleanRoom(await getInnerHtml(table, await row.$('td:nth-child(4) > a > div')))
-        const arrivalString = await getInnerHtml(table, await row.$('td:nth-child(5) > a > div'))
-        const departureString = await getInnerHtml(table, await row.$('td:nth-child(6) > a > div'))
+        const roomName = await cleanRoom(await getInnerHtml(page, await row.$('td:nth-child(4) > a > div')))
+        const arrivalString = await getInnerHtml(page, await row.$('td:nth-child(5) > a > div'))
+        const departureString = await getInnerHtml(page, await row.$('td:nth-child(6) > a > div'))
         const timestamp = Date.parse(departureString)
         if (!isNaN(timestamp)){
             const departure = new Date(timestamp)
