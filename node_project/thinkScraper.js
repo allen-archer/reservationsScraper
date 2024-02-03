@@ -55,15 +55,15 @@ async function doRun(browser){
     const page = await browser.newPage()
     await page.goto(secrets.loginUrl)
     try {
-        await page.waitForXPath('/html/body/div[1]/main/section/div/div/div/form/div[3]/button')
+        await page.waitForSelector('button[type=submit]');
     } catch (e) {
         throw 'Selector for login button failed'
     }
     await page.type('#username', secrets.username)
     await page.type('#password', secrets.password)
     await page.screenshot({ path: 'screenshots/login.png' })
-    const button = await page.$x('/html/body/div[1]/main/section/div/div/div/form/div[3]/button')
-    await button[0].click()
+    const button = await page.$('button[type=submit]');
+    await button.click();
     try {
         await page.waitForSelector('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a')
     } catch (e) {
