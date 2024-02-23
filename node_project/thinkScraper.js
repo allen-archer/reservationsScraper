@@ -51,7 +51,52 @@ async function runScraper(){
     }
 }
 
-async function doRun(browser){
+async function doRun(browser) {
+    const page = await login(browser);
+    try {
+        await scrapeGuestData(page);
+    } catch (e) {
+        logger.error(e);
+    }
+    try {
+        await doBlackouts(page);
+    } catch (e) {
+        logger.error(e);
+    }
+}
+
+async function doBlackouts(page) {
+    const rooms = secrets.blackouts.roomNames;
+    await page.goto(secrets.blackouts.url);
+    await page.waitForSelector('[class="blackout-room-id-date"]');
+    const date = new Date();
+    for (let i = 0; i <= 1; i++) {
+        const dateString = getDateString(date);
+        for (const room of rooms) {
+            const roomSelector = await page.$(`[class="room"][data-room-name="${room}"]`);
+            if (!roomSelector) {
+                continue;
+            }
+            const blackoutSelector = await roomSelector.$(`[class="blackout-room-id-date"][data-date="${dateString}"]`);
+            if (blackoutSelector) {
+                await blackoutSelector.click();
+            }
+        }
+        date.setDate(date.getDate() - 1);
+    }
+    const saveButton = await page.$('button[class="save"]');
+    await saveButton.click();
+    await page.waitForSelector('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a');
+}
+
+function getDateString(date) {
+    const year = date.toLocaleString('default',{year:'numeric'});
+    const day = date.toLocaleString('default',{day:'2-digit'});
+    const month = date.toLocaleString('default',{month:'2-digit'});
+    return `${year}-${month}-${day}`;
+}
+
+async function login(browser) {
     const page = await browser.newPage()
     await page.goto(secrets.loginUrl)
     try {
@@ -70,6 +115,10 @@ async function doRun(browser){
         throw 'Selector for Front Desk link on Calendar page failed'
     }
     await page.screenshot({ path: 'screenshots/calendar.png' })
+    return page;
+}
+
+async function scrapeGuestData(page){
     const maps = []
     await page.click('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a')
     try {
