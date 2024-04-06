@@ -1,6 +1,6 @@
-const Discord = require('discord.js')
-const http = require('http')
-const fs = require('fs')
+import Discord from 'discord.js';
+import http from 'http';
+import fs from 'fs';
 
 let config
 let secrets
@@ -89,4 +89,4 @@ function delay(time) {
     return new Promise(resolve => setTimeout(resolve, time));
 }
 
-module.exports = { initialize, sendSnapshot }
+export { initialize, sendSnapshot }

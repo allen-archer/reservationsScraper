@@ -1,6 +1,6 @@
-const puppeteer = require('puppeteer')
-const { Webhook, EmbedBuilder } = require('@tycrek/discord-hookr');
-const mqttService = require("./mqttService");
+import puppeteer from 'puppeteer';
+import { Webhook, EmbedBuilder } from '@tycrek/discord-hookr';
+import * as mqttService from './mqttService.js';
 
 let config
 let secrets
@@ -484,4 +484,4 @@ function delay(time) {
     return new Promise(resolve => setTimeout(resolve, time));
 }
 
-module.exports = { initialize, runScraper }
+export { initialize, runScraper }

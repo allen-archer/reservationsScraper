@@ -1,6 +1,8 @@
-const mqtt = require('mqtt')
-const frigate = require('./frigate')
+import { sendFrigateNotification } from "./ntfy.js";
+import mqtt from 'mqtt'
+import * as frigate from './frigate.js'
 let mqttConfig
+let config
 let client
 let logger
 const deviceMap = new Map()
@@ -24,9 +26,10 @@ async function changeDeviceState(deviceName, state){
     }
 }
 
-async function initialize(_mqttConfig, _secrets, _logger){
+async function initialize(_mqttConfig, _config, _secrets, _logger){
     logger = _logger
     mqttConfig = _mqttConfig
+    config = _config
     client = mqtt.connect(mqttConfig.address)
     client.on('connect', () => {
         client.subscribe([frigateEventsTopic], () => {
@@ -43,9 +46,19 @@ async function initialize(_mqttConfig, _secrets, _logger){
         const type = obj.type
         if (type === 'new'){
             if (before && before.has_snapshot){
-                frigate.sendSnapshot(before.camera, before.id)
+                if (config.frigate.use.ntfy) {
+                    sendFrigateNotification(before.camera, before.label, before.id);
+                }
+                if (config.frigate.use.discord) {
+                    frigate.sendSnapshot(before.camera, before.id)
+                }
             } else if (after && after.has_snapshot){
-                frigate.sendSnapshot(after.camera, after.id)
+                if (config.frigate.use.ntfy) {
+                    sendFrigateNotification(after.camera, after.label, after.id);
+                }
+                if (config.frigate.use.discord) {
+                    frigate.sendSnapshot(after.camera, after.id)
+                }
             }
         }
     })
@@ -87,4 +100,4 @@ async function publishAttributes(deviceName, attributes){
     await publishMessage(device.registerMessage.json_attributes_topic, JSON.stringify(attributes))
 }
 
-module.exports = { initialize, changeDeviceState, snooze, publishAttributes }
+export { initialize, changeDeviceState, snooze, publishAttributes }

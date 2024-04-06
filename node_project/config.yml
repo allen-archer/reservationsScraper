@@ -7,6 +7,9 @@ maxTries: 1
 frigate:
   host: 192.168.1.105
   port: 5000
+  use:
+    discord: true
+    ntfy: true
 snapshot:
   path: clips/
   temp: config/snapshots/

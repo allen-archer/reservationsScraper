@@ -1,12 +1,13 @@
-const express = require('express')
-const app = express()
-const cron = require('node-cron')
-const { createLogger, format, transports } = require('winston')
-const fs = require('fs')
-const yaml = require('yaml')
-const scraper = require('./thinkScraper')
-const frigate = require('./frigate')
-const mqttService = require("./mqttService")
+import { initializeNtfy } from './ntfy.js'
+import express from 'express';
+const app = express();
+import cron from 'node-cron';
+import { createLogger, format, transports } from 'winston';
+import fs from 'fs';
+import yaml from 'yaml';
+import * as scraper from './thinkScraper.js';
+import * as frigate from './frigate.js';
+import * as mqttService from './mqttService.js';
 
 let secrets
 let config
@@ -70,9 +71,10 @@ async function initialize(){
         secretsFile = fs.readFileSync('./secrets.yml', 'utf-8')
     }
     secrets = yaml.parse(secretsFile)
-    mqttService.initialize(mqttConfig, secrets, logger).then()
+    mqttService.initialize(mqttConfig, config, secrets, logger).then()
     scraper.initialize(config, secrets, logger).then()
     frigate.initialize(config, secrets, logger).then()
+    initializeNtfy(config, secrets, logger).then();
     app.listen(config.port, () => {
         logger.info('server listening on port: ' + config.port)
     })
@@ -132,25 +134,5 @@ app.get('/scrape', (request, response) => {
         logger.info('Manual scrape process finished.')
     })
 })
-
-// app.get('/updateCode', (request, response) => {
-//     const query = request.query
-//     if (query.confirmationCode){
-//         scraper.updateCode(query.confirmationCode)
-//             .then(doRun => {
-//                 if (doRun){
-//                     logger.info('Confirmation code updated, scrape process started.')
-//                     response.send('Confirmation code updated, scrape process started.')
-//                     runScraper().then()
-//                 } else {
-//                     logger.info('Confirmation code updated, but scrape process not started.')
-//                     response.send('Confirmation code updated, but scrape process not started.')
-//                 }
-//             })
-//     } else {
-//         logger.info('No confirmation code, request ignored.')
-//         response.send('No confirmation code, request ignored.')
-//     }
-// })
 
 initialize().then()
