@@ -1,6 +1,6 @@
 {
   "otherAddress": "tcp://172.17.0.4",
-  "address": "tcp://192.168.1.121",
+  "address": "tcp://192.168.1.105",
   "maxRetries": "3",
   "devices": [
     {
