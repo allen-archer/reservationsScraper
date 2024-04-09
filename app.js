@@ -6,7 +6,6 @@ import { createLogger, format, transports } from 'winston';
 import fs from 'fs';
 import yaml from 'yaml';
 import * as scraper from './thinkScraper.js';
-import * as frigate from './frigate.js';
 import * as mqttService from './mqttService.js';
 
 let secrets
@@ -73,7 +72,6 @@ async function initialize(){
     secrets = yaml.parse(secretsFile)
     mqttService.initialize(mqttConfig, config, secrets, logger).then()
     scraper.initialize(config, secrets, logger).then()
-    frigate.initialize(config, secrets, logger).then()
     initializeNtfy(config, secrets, logger).then();
     app.listen(config.port, () => {
         logger.info('server listening on port: ' + config.port)
