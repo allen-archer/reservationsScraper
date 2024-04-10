@@ -106,6 +106,7 @@ function getDateString(date) {
 
 async function login(browser) {
   const page = await browser.newPage();
+  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
   await page.goto(secrets.loginUrl);
   try {
     await page.waitForSelector('button[type=submit]');
