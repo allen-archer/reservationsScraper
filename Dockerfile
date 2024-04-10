@@ -1,4 +1,4 @@
-FROM node:18
+FROM node:21-slim
 WORKDIR /puppeteer
 RUN apt-get update \
     && apt-get install -y wget gnupg \
@@ -9,15 +9,12 @@ RUN apt-get update \
       --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json ./
-COPY package-lock.json ./
+COPY *.json ./
+COPY *.js ./
+COPY *.yml ./
 RUN npm ci
 
 RUN chmod -R o+rwx node_modules/puppeteer/.local-chromium
-
-COPY *.js ./
-COPY *.yml ./
-COPY mqttConfig.json ./
 
 EXPOSE 3000
 

@@ -1,4 +1,3 @@
-import {initializeNtfy} from './ntfy.js'
 import express from 'express';
 
 const app = express();
@@ -73,7 +72,6 @@ async function initialize() {
   secrets = yaml.parse(secretsFile);
   mqttService.initialize(mqttConfig, config, secrets, logger).then();
   scraper.initialize(config, secrets, logger).then();
-  initializeNtfy(config, secrets, logger).then();
   app.listen(config.port, () => {
     logger.info('server listening on port: ' + config.port);
   })
