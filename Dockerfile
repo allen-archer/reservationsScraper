@@ -12,7 +12,7 @@ RUN apt-get update \
 COPY *.json ./
 COPY *.js ./
 COPY *.yml ./
-RUN npm ci
+RUN npm ci --no-audit
 
 RUN chmod -R o+rwx node_modules/puppeteer/.local-chromium
 
