@@ -25,7 +25,7 @@ async function initialize(_config, _secrets, _logger) {
 
 async function runScraper() {
   const browser = await puppeteer.launch({
-    headless: true,
+    headless: 'new',
     args: [
       '--disable-gpu',
       '--disable-dev-shm-usage',
@@ -34,7 +34,7 @@ async function runScraper() {
       '--disable-accelerated-2d-canvas',
       '--no-first-run',
       '--no-zygote',
-      '--single-process',
+      // '--single-process', // I don't know why, but after upgrading to puppeteer 19, this is causing the browser to crash
       '--window-size=1920,1080' // default is 800x600
     ],
     defaultViewport: {
@@ -52,7 +52,12 @@ async function runScraper() {
 }
 
 async function doRun(browser) {
-  const page = await login(browser);
+  let page;
+  try {
+    page = await login(browser);
+  } catch (e) {
+    throw e;
+  }
   try {
     await scrapeGuestData(page);
   } catch (e) {
@@ -85,7 +90,10 @@ async function doBlackouts(page) {
     date.setDate(date.getDate() - 1);
   }
   const saveButton = await page.$('button[class="save"]');
-  await saveButton.click();
+  await Promise.all([
+    page.waitForNavigation({waitUntil: 'networkidle0'}),
+    saveButton.click()
+  ]);
   await page.waitForSelector('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a');
 }
 
@@ -102,17 +110,20 @@ async function login(browser) {
   try {
     await page.waitForSelector('button[type=submit]');
   } catch (e) {
-    throw 'Selector for login button failed'
+    throw 'Selector for login button failed';
   }
   await page.type('#username', secrets.username);
   await page.type('#password', secrets.password);
   await page.screenshot({path: 'screenshots/login.png'});
   const button = await page.$('button[type=submit]');
-  await button.click();
   try {
+    await Promise.all([
+      page.waitForNavigation({waitUntil: 'networkidle0'}),
+      button.click()
+    ]);
     await page.waitForSelector('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a');
   } catch (e) {
-    throw 'Selector for Front Desk link on Calendar page failed'
+    throw 'Selector for Front Desk link on Calendar page failed';
   }
   await page.screenshot({path: 'screenshots/calendar.png'});
   return page;
@@ -120,8 +131,11 @@ async function login(browser) {
 
 async function scrapeGuestData(page) {
   const maps = [];
-  await page.click('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a');
   try {
+    await Promise.all([
+      page.waitForNavigation({waitUntil: 'networkidle0'}),
+      page.click('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a')
+    ]);
     await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2');
   } catch (e) {
     throw 'Selector for Arrivals header on Front Desk page first iteration failed';
@@ -135,8 +149,11 @@ async function scrapeGuestData(page) {
       const dateInput = await page.$('#date_input_input');
       await dateInput.click({clickCount: 3}); // click 3 times to select all text
       await dateInput.type(dateString); // to then overwrite that text
-      await page.click('#app > div > div.application-body > div > div.component.front-desk-form > form > div.component.tr-button.presentation-standard.precedence-primary > button > div > div');
       try {
+        await Promise.all([
+          page.waitForNavigation({waitUntil: ['networkidle0','domcontentloaded']}),
+          page.click('#app > div > div.application-body > div > div.component.front-desk-form > form > div.component.tr-button.presentation-standard.precedence-primary > button > div > div')
+        ]);
         await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2');
       } catch (e) {
         throw 'Selector for Arrivals header on Front Desk page second iteration failed';
@@ -165,7 +182,7 @@ async function scrapeGuestData(page) {
         {
           occupiedTonight: false,
           checkingInToday: false
-        })
+        });
   }
   for (const entry of maps[0].get('checkins')) {
     const rooms = []
@@ -254,12 +271,15 @@ async function getPhonesFromLink(page, link) {
 
 async function getPreviousStays(page) {
   const date = new Date();
-  await page.click('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-header > div.customer-area > div.component.customer-name.small.has-link > a');
   try {
+    await Promise.all([
+      page.waitForNavigation({waitUntil: 'domcontentloaded'}),
+      page.click('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-header > div.customer-area > div.component.customer-name.small.has-link > a')
+    ]);
     await page.waitForSelector('#app > div > div.application-body > div > div.customer-details-page-body > div > div > table > tbody');
   } catch (e) {
-    logger.error('Wait for selector failed on previous stays table');
-    return 'ERROR';
+      logger.error('Wait for selector failed on previous stays table');
+      return 'ERROR';
   }
   const table = await page.$('#app > div > div.application-body > div > div.customer-details-page-body > div > div > table > tbody');
   if (table === null) {

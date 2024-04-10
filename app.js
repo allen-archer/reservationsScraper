@@ -27,7 +27,7 @@ async function runScraper() {
       await scraper.runScraper(config, secrets, logger);
       success = true;
     } catch (e) {
-      logger.error(e, e.stack);
+      logger.error(e);
       await delay(10000);
     }
   }
