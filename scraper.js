@@ -75,6 +75,7 @@ async function doBlackouts(page) {
   await page.goto(secrets.blackouts.url);
   await page.waitForSelector('[class="blackout-room-id-date"]');
   const date = new Date();
+  let doCheck = true;
   for (let i = 0; i <= 1; i++) {
     const dateString = getDateString(date);
     for (const room of rooms) {
@@ -84,10 +85,16 @@ async function doBlackouts(page) {
       }
       const blackoutSelector = await roomSelector.$(`[class="blackout-room-id-date"][data-date="${dateString}"]`);
       if (blackoutSelector) {
-        await blackoutSelector.click();
+        let isChecked = await isElementChecked(page, blackoutSelector);
+        if (isChecked && !doCheck) {
+          await blackoutSelector.click();
+        } else if (!isChecked && doCheck) {
+          await blackoutSelector.click();
+        }
       }
     }
     date.setDate(date.getDate() - 1);
+    doCheck = false;
   }
   const saveButton = await page.$('button[class="save"]');
   await Promise.all([
@@ -492,6 +499,14 @@ async function getInnerHtml(page, element) {
     return '';
   }
   return await page.evaluate(element => element.innerHTML, element);
+}
+
+async function isElementChecked(page, element) {
+  if (element) {
+    return await page.evaluate(element => element.checked, element);
+  } else {
+    return false;
+  }
 }
 
 async function getLink(page, element) {
