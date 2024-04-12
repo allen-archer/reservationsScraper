@@ -14,7 +14,7 @@ const embedColors = [
   '#F9DBA5',
   '#6E2250',
   '#332823'
-]
+];
 let embedIndex = 0;
 
 async function initialize(_config, _secrets, _logger) {
@@ -230,7 +230,7 @@ async function scrapeGuestData(page) {
       occupancyMap.get(room).checkingInToday = false;
     }
   }
-  const phoneNumberMap = await combineAllPhoneNumbers(maps[0], secrets);
+  const phoneNumberMap = combineAllPhoneNumbers(maps[0], secrets);
   mqttService.changeDeviceState('Evening Guests', areEveningGuests).then();
   mqttService.changeDeviceState('Breakfast Guests', areBreakfastGuests).then();
   for (const key of occupancyMap.keys()) {
@@ -238,7 +238,7 @@ async function scrapeGuestData(page) {
   }
   mqttService.publishAttributes('occupancy phone numbers',
       {state: 'ON', phones: Object.fromEntries(phoneNumberMap)}).then();
-  const messages = await createMessages(new Date(), maps, config.daysToCheck);
+  const messages = createMessages(new Date(), maps, config.daysToCheck);
   for (const message of messages) {
     const webhook = new Webhook(secrets.scraper.webhook);
     webhook.setContent(message.content);
@@ -272,7 +272,7 @@ async function getPhonesFromLink(page, link) {
   const phoneElements = Array.from(await page.$$('.customer-phone > .component > a'));
   const phones = new Set();
   for (const phone of phoneElements) {
-    phones.add(await cleanPhone(await getInnerHtml(page, phone)));
+    phones.add(cleanPhone(await getInnerHtml(page, phone)));
   }
   return Array.from(phones);
 }
@@ -299,7 +299,17 @@ async function getPreviousStays(page) {
   let lastStayFound = false;
   let previousStaysCount = 0;
   for (const row of rows) {
-    const roomName = await cleanRoom(await getInnerHtml(page, await row.$('td:nth-child(4) > a > div')));
+    const totalString = await getInnerHtml(page, await row.$('td:nth-child(9) > a > div'));
+    if (totalString && totalString === '$0.00') {
+      // Not a real stay, don't count it.
+      continue;
+    }
+    const roomNameElements = await row.$$('td:nth-child(4) > a.visible > div');
+    const roomNames = [];
+    for (const room of roomNameElements) {
+      roomNames.push(cleanRoom(await getInnerHtml(page, room)));
+    }
+    const roomName = roomNames.join(', ');
     const arrivalString = await getInnerHtml(page, await row.$('td:nth-child(5) > a > div'));
     const departureString = await getInnerHtml(page, await row.$('td:nth-child(6) > a > div'));
     const timestamp = Date.parse(departureString);
@@ -342,10 +352,10 @@ async function getMapForDay(page) {
       const notes = Array.from(await rowElement.$$(`td:nth-child(7) > div > div`));
       row++;
       const entry = {
-        name: await cleanName(await getInnerHtml(page, name)),
-        room: await cleanRoom(await getInnerHtml(page, room)),
-        nights: await cleanNights(await getInnerHtml(page, nights)),
-        amount: await cleanPaid(await getInnerHtml(page, paid)),
+        name: cleanName(await getInnerHtml(page, name)),
+        room: cleanRoom(await getInnerHtml(page, room)),
+        nights: cleanNights(await getInnerHtml(page, nights)),
+        amount: cleanPaid(await getInnerHtml(page, paid)),
         link: await getLink(page, link),
         notes: await cleanNotes(page, notes)
       }
@@ -361,17 +371,17 @@ async function getMapForDay(page) {
   return map;
 }
 
-async function createMessages(today, maps, numberOfDays) {
+function createMessages(today, maps, numberOfDays) {
   let messages = [];
   for (let i = 0; i < numberOfDays; i++) {
     let date = new Date(today);
     date.setDate(date.getDate() + i);
-    messages.push(await getMessageForDay(date, maps[i]));
+    messages.push(getMessageForDay(date, maps[i]));
   }
   return messages;
 }
 
-async function getMessageForDay(day, map) {
+function getMessageForDay(day, map) {
   const checkins = map.get('checkins');
   const checkouts = map.get('checkouts');
   const message = {
@@ -430,7 +440,7 @@ async function getMessageForDay(day, map) {
   return message;
 }
 
-async function combineAllPhoneNumbers(map, secrets) {
+function combineAllPhoneNumbers(map, secrets) {
   const phoneNumberMap = new Map();
   const entries = [];
   for (const entry of map.get('checkins')) {
@@ -445,7 +455,7 @@ async function combineAllPhoneNumbers(map, secrets) {
   return phoneNumberMap;
 }
 
-async function cleanPhone(phone) {
+function cleanPhone(phone) {
   return phone
       .replace('+1', '')
       .replace('(Cell)', '')
@@ -456,23 +466,23 @@ async function cleanPhone(phone) {
       .replaceAll(')', '');
 }
 
-async function cleanName(name) {
+function cleanName(name) {
   const nameSansHtml = name.replaceAll(/<[^>]*>/g, ``);
   const split = nameSansHtml.split(', ');
   return `${split[1]} ${split[0]}`;
 }
 
-async function cleanRoom(room) {
+function cleanRoom(room) {
   const split = room.split(' ');
   return split[0];
 }
 
-async function cleanNights(nights) {
+function cleanNights(nights) {
   const split = nights.split(' ');
   return split[2];
 }
 
-async function cleanPaid(paid) {
+function cleanPaid(paid) {
   if (paid.includes('Yes')) {
     return '$0.00';
   } else {
