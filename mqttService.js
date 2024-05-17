@@ -1,4 +1,4 @@
-import mqtt from 'mqtt'
+import mqtt from 'mqtt';
 
 let mqttConfig;
 let config;

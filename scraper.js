@@ -456,14 +456,7 @@ function combineAllPhoneNumbers(map, secrets) {
 }
 
 function cleanPhone(phone) {
-  return phone
-      .replace('+1', '')
-      .replace('(Cell)', '')
-      .replace(/\s/g, '') // all whitespace
-      .replaceAll('-', '')
-      .replaceAll('.', '')
-      .replaceAll('(', '')
-      .replaceAll(')', '');
+  return phone.replace(/\D/g, '');
 }
 
 function cleanName(name) {

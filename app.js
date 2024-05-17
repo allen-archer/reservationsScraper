@@ -74,7 +74,7 @@ async function initialize() {
   scraper.initialize(config, secrets, logger).then();
   app.listen(config.port, () => {
     logger.info('server listening on port: ' + config.port);
-  })
+  });
   cron.schedule(config.cronExpression, async () => {
     await runScraper();
   }, {
