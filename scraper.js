@@ -59,12 +59,12 @@ async function doRun(browser) {
     throw e;
   }
   try {
-    await scrapeGuestData(page);
+    await doBlackouts(page);
   } catch (e) {
     logger.error(e);
   }
   try {
-    await doBlackouts(page);
+    await scrapeGuestData(page);
   } catch (e) {
     logger.error(e);
   }
@@ -76,6 +76,10 @@ async function doBlackouts(page) {
   await page.waitForSelector('[class="blackout-room-id-date"]');
   const date = new Date();
   let doCheck = true;
+  const isDayBefore = date.getHours() >= 12;
+  if (isDayBefore) {
+    date.setDate(date.getDate() + 1);
+  }
   for (let i = 0; i <= 1; i++) {
     const dateString = getDateString(date);
     for (const room of rooms) {
@@ -93,7 +97,7 @@ async function doBlackouts(page) {
         }
       }
     }
-    date.setDate(date.getDate() - 1);
+    date.setDate(date.getDate() - 2);
     doCheck = false;
   }
   const saveButton = await page.$('button[class="save"]');
@@ -149,8 +153,10 @@ async function scrapeGuestData(page) {
     throw 'Selector for Arrivals header on Front Desk page first iteration failed';
   }
   let date = new Date();
+  // If the scraper is run the day before, we need to check the next day's arrivals instead of today's
+  const isDayBefore = date.getHours() >= 12;
   for (let i = 0; i < config.daysToCheck; i++) {
-    if (i > 0) {
+    if (i > 0 || isDayBefore) {
       date.setDate(date.getDate() + 1);
       const month = date.toLocaleString('en-US', {month: 'short'});
       const dateString = `${month} ${date.getDate()}, ${date.getFullYear()}`;
@@ -372,6 +378,10 @@ async function getMapForDay(page) {
 }
 
 function createMessages(today, maps, numberOfDays) {
+  const isDayBefore = today.getHours() >= 12;
+  if (isDayBefore) {
+    today.setDate(today.getDate() + 1);
+  }
   let messages = [];
   for (let i = 0; i < numberOfDays; i++) {
     let date = new Date(today);
