@@ -2,5 +2,5 @@ port: 3000
 daysToCheck: 3
 timezone: America/New_York
 timeout: 30000
-cronExpression: '30 0 * * *'
+cronExpression: '0 22 * * *'
 maxTries: 1

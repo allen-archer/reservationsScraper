@@ -16,7 +16,7 @@ function delay(time) {
   return new Promise(resolve => setTimeout(resolve, time));
 }
 
-async function runScraper() {
+async function runScraper(runConfig) {
   logger.info('Starting run');
   let success = false;
   let i = 0;
@@ -24,7 +24,7 @@ async function runScraper() {
   while (!success && i < maxTries) {
     try {
       i++;
-      await scraper.runScraper(config, secrets, logger);
+      await scraper.runScraper(runConfig);
       success = true;
     } catch (e) {
       logger.error(e);
@@ -76,7 +76,11 @@ async function initialize() {
     logger.info('server listening on port: ' + config.port);
   });
   cron.schedule(config.cronExpression, async () => {
-    await runScraper();
+    const runConfig = {
+      doBlackouts: true,
+      doScrapeGuestData: true
+    }
+    await runScraper(runConfig);
   }, {
     scheduled: true,
     timezone: config.timezone
@@ -97,13 +101,19 @@ async function initializeLogger(path) {
 
 app.get('/scrape', (request, response) => {
   const query = request.query;
-  if (query.confirmationCode) {
-    secrets.confirmationCode = query.confirmationCode;
+  const runConfig = {
+    doBlackouts: queryParameterDoesNotExistOrIsTrue(query, 'doBlackouts'),
+    doScrapeGuestData: queryParameterDoesNotExistOrIsTrue(query, 'doScrapeGuestData'),
+    dateAdjust: query.dateAdjust
   }
   response.send('Scrape process started');
-  runScraper().then(() => {
+  runScraper(runConfig).then(() => {
     logger.info('Manual scrape process finished.');
   });
 });
+
+function queryParameterDoesNotExistOrIsTrue(query, parameter) {
+    return !query[parameter] || query[parameter] === 'true';
+}
 
 initialize().then();

@@ -20,6 +20,7 @@
     "node-cron": "^3.0.0",
     "node-fetch": "^3.3.2",
     "puppeteer": "^22.6.3",
+    "totp-generator": "^1.0.0",
     "winston": "^3.7.2",
     "yaml": "^2.0.1"
   }

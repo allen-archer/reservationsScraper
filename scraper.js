@@ -1,6 +1,7 @@
 import puppeteer from 'puppeteer';
 import {Webhook, EmbedBuilder} from '@tycrek/discord-hookr';
 import * as mqttService from './mqttService.js';
+import {TOTP} from 'totp-generator';
 
 let config;
 let secrets;
@@ -23,7 +24,7 @@ async function initialize(_config, _secrets, _logger) {
   logger = _logger;
 }
 
-async function runScraper() {
+async function runScraper(runConfig) {
   const browser = await puppeteer.launch({
     headless: 'new',
     args: [
@@ -43,7 +44,7 @@ async function runScraper() {
     }
   });
   try {
-    await doRun(browser);
+    await doRun(browser, runConfig);
   } catch (e) {
     throw e;
   } finally {
@@ -51,7 +52,7 @@ async function runScraper() {
   }
 }
 
-async function doRun(browser) {
+async function doRun(browser, runConfig) {
   let page;
   try {
     page = await login(browser);
@@ -59,22 +60,27 @@ async function doRun(browser) {
     throw e;
   }
   try {
-    await doBlackouts(page);
+    if (runConfig?.doBlackouts) {
+      await doBlackouts(page, runConfig);
+    }
   } catch (e) {
     logger.error(e);
   }
   try {
-    await scrapeGuestData(page);
+    if (runConfig?.doScrapeGuestData) {
+      await scrapeGuestData(page, runConfig);
+    }
   } catch (e) {
     logger.error(e);
   }
 }
 
-async function doBlackouts(page) {
+async function doBlackouts(page, runConfig) {
+  logger.info('Running Blackouts');
   const rooms = secrets.blackouts.roomNames;
   await page.goto(secrets.blackouts.url);
   await page.waitForSelector('[class="blackout-room-id-date"]');
-  const date = new Date();
+  const date = getScrapeDate(runConfig);
   let doCheck = true;
   const isDayBefore = date.getHours() >= 12;
   if (isDayBefore) {
@@ -116,6 +122,7 @@ function getDateString(date) {
 }
 
 async function login(browser) {
+  const frontDeskLinkSelector = '#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a';
   const page = await browser.newPage();
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
   await page.goto(secrets.loginUrl);
@@ -133,15 +140,36 @@ async function login(browser) {
       page.waitForNavigation({waitUntil: 'networkidle0'}),
       button.click()
     ]);
-    await page.waitForSelector('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a');
+    await page.waitForSelector(`#code, ${frontDeskLinkSelector}`);
   } catch (e) {
-    throw 'Selector for Front Desk link on Calendar page failed';
+    throw 'Selector for OTP or Front Desk link on Calendar page failed';
+  }
+  const codeInput = await page.$('#code');
+  if (codeInput) {
+    const { otp, expires } = TOTP.generate(secrets.totp.secret);
+    logger.info(`OTP was required, generated code ${otp} which expires at ${expires}`);
+    await page.type('#code', otp);
+    const rememberBrowser = await page.$('#rememberBrowser');
+    if (!await isElementChecked(page, rememberBrowser)) {
+      await rememberBrowser.click();
+    }
+    await page.screenshot({path: 'screenshots/otp.png'});
+    const button2 = await page.$('button[type=submit]');
+    try {
+      await Promise.all([
+        page.waitForNavigation({waitUntil: 'networkidle0'}),
+        button2.click()
+      ]);
+      await page.waitForSelector(frontDeskLinkSelector);
+    } catch (e) {
+      throw 'Selector for Front Desk link on Calendar page failed after OTP entered';
+    }
   }
   await page.screenshot({path: 'screenshots/calendar.png'});
   return page;
 }
 
-async function scrapeGuestData(page) {
+async function scrapeGuestData(page, runConfig) {
   const maps = [];
   try {
     await Promise.all([
@@ -152,7 +180,7 @@ async function scrapeGuestData(page) {
   } catch (e) {
     throw 'Selector for Arrivals header on Front Desk page first iteration failed';
   }
-  let date = new Date();
+  let date = getScrapeDate(runConfig);
   // If the scraper is run the day before, we need to check the next day's arrivals instead of today's
   const isDayBefore = date.getHours() >= 12;
   for (let i = 0; i < config.daysToCheck; i++) {
@@ -244,7 +272,7 @@ async function scrapeGuestData(page) {
   }
   mqttService.publishAttributes('occupancy phone numbers',
       {state: 'ON', phones: Object.fromEntries(phoneNumberMap)}).then();
-  const messages = createMessages(new Date(), maps, config.daysToCheck);
+  const messages = createMessages(getScrapeDate(runConfig), maps, config.daysToCheck);
   for (const message of messages) {
     const webhook = new Webhook(secrets.scraper.webhook);
     webhook.setContent(message.content);
@@ -527,6 +555,16 @@ async function getLink(page, element) {
     return '';
   }
   return await page.evaluate(element => element.href, element);
+}
+
+function getScrapeDate(runConfig) {
+  const date = new Date();
+  if (runConfig?.dateAdjust) {
+    logger.info(`Adjusting date:${date} by:${runConfig.dateAdjust}`);
+    date.setDate(date.getDate() + Number(runConfig.dateAdjust));
+    logger.info('New date is ' + date);
+  }
+  return date;
 }
 
 function delay(time) {
