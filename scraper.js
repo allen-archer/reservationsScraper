@@ -86,9 +86,32 @@ async function doBlackouts(page, runConfig) {
   if (isDayBefore) {
     date.setDate(date.getDate() + 1);
   }
+  const combos = new Map();
+  for (let [comboName, containedNames] of Object.entries(secrets.blackouts.roomComboNames)) {
+    combos.set(comboName, new Set(containedNames));
+  }
   for (let i = 0; i <= 1; i++) {
+    const roomSet = new Set(rooms);
     const dateString = getDateString(date);
-    for (const room of rooms) {
+    // Check for combo rooms that are occupied and remove the individual rooms from the set because the
+    // blackout page will error if you try to blackout a room that is part of a combo that is already occupied
+    for (const [comboName, containedNames] of combos) {
+      const roomSelector = await page.$(`[class="room"][data-room-name="${comboName}"]`);
+      if (!roomSelector) {
+        continue;
+      }
+      const blackoutSelector = await roomSelector.$(`[class="blackout-room-id-date"][data-date="${dateString}"]`);
+      if (!blackoutSelector) {
+        for (const room of roomSet) {
+          if (containedNames.has(room)) {
+            // Remove the room from the potential blackout targets for this day
+            roomSet.delete(room);
+            logger.info(`Removing room name: ${room} because ${comboName} is occupied`);
+          }
+        }
+      }
+    }
+    for (const room of roomSet) {
       const roomSelector = await page.$(`[class="room"][data-room-name="${room}"]`);
       if (!roomSelector) {
         continue;
