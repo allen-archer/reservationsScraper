@@ -288,16 +288,16 @@ async function scrapeGuestData(page, runConfig) {
     }
   }
   const phoneNumberMap = combineAllPhoneNumbers(maps[0], secrets);
-  mqttService.changeDeviceState('Evening Guests', areEveningGuests).then();
-  mqttService.changeDeviceState('Breakfast Guests', areBreakfastGuests).then();
+  mqttService.changeDeviceState('evening guests', areEveningGuests).then();
+  mqttService.changeDeviceState('breakfast guests', areBreakfastGuests).then();
   for (const key of occupancyMap.keys()) {
     mqttService.publishAttributes('occupancy ' + key, occupancyMap.get(key)).then();
   }
   mqttService.publishAttributes('occupancy phone numbers',
-      {state: 'ON', phones: Object.fromEntries(phoneNumberMap)}).then();
+      Object.fromEntries(phoneNumberMap)).then();
+  const webhook = new Webhook(secrets.scraper.webhook);
   const messages = createMessages(getScrapeDate(runConfig), maps, config.daysToCheck);
   for (const message of messages) {
-    const webhook = new Webhook(secrets.scraper.webhook);
     webhook.setContent(message.content);
     webhook.addEmbed(message.embeds);
     await webhook.send();
