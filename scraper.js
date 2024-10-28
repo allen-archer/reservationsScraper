@@ -295,9 +295,9 @@ async function scrapeGuestData(page, runConfig) {
   }
   mqttService.publishAttributes('occupancy phone numbers',
       Object.fromEntries(phoneNumberMap)).then();
-  const webhook = new Webhook(secrets.scraper.webhook);
   const messages = createMessages(getScrapeDate(runConfig), maps, config.daysToCheck);
   for (const message of messages) {
+    const webhook = new Webhook(secrets.scraper.webhook);
     webhook.setContent(message.content);
     webhook.addEmbed(message.embeds);
     await webhook.send();
