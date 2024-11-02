@@ -4,43 +4,40 @@ let config;
 let secrets;
 let logger;
 let ntfyUrl;
-let frigateUrl;
+let scraperErrorConfig;
 
-async function initializeNtfy(_config, _secrets, _logger) {
+async function initialize(_config, _secrets, _logger) {
   config = _config;
   secrets = _secrets;
   logger = _logger;
   ntfyUrl = secrets.ntfy.url;
-  frigateUrl = secrets.frigate.url;
+  scraperErrorConfig = config.ntfy.scraperError;
 }
 
-function sendNotification(message, topic) {
+function sendScraperErrorNotification(error) {
+  sendNotification(error, scraperErrorConfig.topic, scraperErrorConfig.title, scraperErrorConfig.tags, scraperErrorConfig.priority);
+}
+
+function sendNotification(message, topic, title, tags, priority) {
   const options = {
     method: 'POST',
     body: message
   };
+  if (title || tags || priority) {
+    options.headers = {};
+    if (title) {
+      options.headers.Title = title;
+    }
+    if (tags) {
+      options.headers.Tags = tags;
+    }
+    if (priority) {
+      options.headers.Priority = priority;
+    }
+  }
   fetch(ntfyUrl + '/' + topic, options)
       .then()
       .catch(error => console.error('Error:', error));
 }
 
-function sendFrigateNotification(camera, label, id) {
-  const options = {
-    method: 'POST',
-    headers: {
-      'Title': `${capitalizeFirstLetter(label)} detected`,
-      'Attach': `${frigateUrl}/api/events/${id}/snapshot.jpg?bbox=1&timestamp=1&crop=1&h=480&quality=90`,
-      'Click': `${frigateUrl}/api/events/${id}/clip.mp4`
-    },
-    body: `by ${capitalizeFirstLetter(camera)} camera`
-  };
-  fetch(ntfyUrl + '/frigate', options)
-      .then()
-      .catch(error => console.error('Error:', error));
-}
-
-function capitalizeFirstLetter(string) {
-  return string.charAt(0).toUpperCase() + string.slice(1);
-}
-
-export {sendNotification, sendFrigateNotification, initializeNtfy};
+export {sendNotification, sendScraperErrorNotification, initialize};

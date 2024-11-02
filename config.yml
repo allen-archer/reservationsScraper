@@ -4,3 +4,9 @@ timezone: America/New_York
 timeout: 30000
 cronExpression: '0 22 * * *'
 maxTries: 1
+ntfy:
+  scraperError:
+    topic: test
+    tags: computer,rotating_light
+    priority: 5
+    title: Scraper Error

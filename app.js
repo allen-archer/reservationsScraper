@@ -7,6 +7,7 @@ import fs from 'fs';
 import yaml from 'yaml';
 import * as scraper from './scraper.js';
 import * as mqttService from './mqttService.js';
+import * as ntfy from './ntfy.js';
 
 let secrets;
 let config;
@@ -21,6 +22,7 @@ async function runScraper(runConfig) {
   let success = false;
   let i = 0;
   let maxTries = config.maxTries;
+  let error;
   while (!success && i < maxTries) {
     try {
       i++;
@@ -28,10 +30,14 @@ async function runScraper(runConfig) {
       success = true;
     } catch (e) {
       logger.error(e);
-      await delay(10000);
+      error = e;
+      if (i < maxTries) {
+        await delay(10000);
+      }
     }
   }
   if (!success) {
+    ntfy.sendScraperErrorNotification(error);
     logger.error('Failed to run ' + maxTries + ' times');
   }
 }
@@ -72,6 +78,7 @@ async function initialize() {
   secrets = yaml.parse(secretsFile);
   mqttService.initialize(mqttConfig, config, secrets, logger).then();
   scraper.initialize(config, secrets, logger).then();
+  ntfy.initialize(config, secrets, logger).then();
   app.listen(config.port, () => {
     logger.info('server listening on port: ' + config.port);
   });
