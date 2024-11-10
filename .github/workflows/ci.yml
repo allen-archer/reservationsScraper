@@ -24,4 +24,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: chunkystyles/reservationsscraper:latest
+          tags: ghcr.io/chunkystyles/reservationsscraper:latest
