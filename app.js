@@ -76,6 +76,11 @@ async function initialize() {
     secretsFile = fs.readFileSync('./secrets.yml', 'utf-8');
   }
   secrets = yaml.parse(secretsFile);
+  if (secrets.ntfy.user && secrets.ntfy.password) {
+    secrets.ntfy.basicAuth = `Basic ${Buffer.from(secrets.ntfy.user + ':' + secrets.ntfy.password, 'utf8').toString('base64')}`;
+  } else if (secrets.ntfy.token) {
+    secrets.ntfy.token = `Bearer ${secrets.ntfy.token}`;
+  }
   mqttService.initialize(mqttConfig, config, secrets, logger).then();
   scraper.initialize(config, secrets, logger).then();
   ntfy.initialize(config, secrets, logger).then();

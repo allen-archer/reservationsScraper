@@ -3,14 +3,13 @@ import fetch from 'node-fetch';
 let config;
 let secrets;
 let logger;
-let ntfyUrl;
 let scraperErrorConfig;
 
 async function initialize(_config, _secrets, _logger) {
   config = _config;
   secrets = _secrets;
   logger = _logger;
-  ntfyUrl = secrets.ntfy.url;
+  secrets = _secrets;
   scraperErrorConfig = config.ntfy.scraperError;
 }
 
@@ -35,7 +34,12 @@ function sendNotification(message, topic, title, tags, priority) {
       options.headers.Priority = priority;
     }
   }
-  fetch(ntfyUrl + '/' + topic, options)
+  if (secrets.ntfy.basicAuth) {
+    options.headers.Authorization = secrets.ntfy.basicAuth;
+  } else if (secrets.ntfy.token) {
+    options.headers.Authorization = secrets.ntfy.token;
+  }
+  fetch(secrets.ntfy.url + '/' + topic, options)
       .then()
       .catch(error => console.error('Error:', error));
 }
