@@ -352,9 +352,7 @@ async function getPreviousStays(page) {
     return 'ERROR';
   }
   const rows = await table.$$('tr');
-  let staysMessage = '';
-  let lastStayFound = false;
-  let previousStaysCount = 0;
+  const stays = [];
   for (const row of rows) {
     const totalString = await getInnerHtml(page, await row.$('td:nth-child(9) > a > div'));
     if (totalString && totalString === '$0.00') {
@@ -371,18 +369,23 @@ async function getPreviousStays(page) {
     const departureString = await getInnerHtml(page, await row.$('td:nth-child(6) > a > div'));
     const timestamp = Date.parse(departureString);
     if (!isNaN(timestamp)) {
-      const departure = new Date(timestamp);
-      if (departure < date) {
-        previousStaysCount++;
-        if (lastStayFound === false) {
-          lastStayFound = true;
-          staysMessage += `# previous stays, last on ${arrivalString}-${departureString} in ${roomName}`;
-        }
+      const stayDate = new Date(timestamp);
+      if (stayDate < date) {
+        stays.push([new Date(timestamp), arrivalString, departureString, roomName]);
       }
     }
   }
-  if (previousStaysCount > 0) {
-    return staysMessage.replace('#', previousStaysCount);
+  const lastStay = stays?.sort(function(left, right) {
+    if (left[0] > right[0]) {
+      return -1;
+    } else if (left[0] < right[0]) {
+      return 1;
+    } else {
+      return 0;
+    }
+  })[0];
+  if (stays.length > 0) {
+    return `${stays.length} previous stays, last on ${lastStay[1]}-${lastStay[2]} in ${lastStay[3]}`
   } else {
     return 'First time guest';
   }
