@@ -1,4 +1,4 @@
-FROM node:21-slim
+FROM node:lts-slim
 WORKDIR /puppeteer
 EXPOSE 3000
 CMD ["node", "app.js"]
