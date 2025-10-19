@@ -17,6 +17,7 @@ const embedColors = [
   '#332823'
 ];
 let embedIndex = 0;
+const frontDeskLinkSelector = '#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a';
 
 async function initialize(_config, _secrets, _logger) {
   config = _config;
@@ -145,7 +146,6 @@ function getDateString(date) {
 }
 
 async function login(browser) {
-  const frontDeskLinkSelector = '#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a';
   const page = await browser.newPage();
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
   await page.goto(secrets.loginUrl);
@@ -230,14 +230,14 @@ async function scrapeGuestData(page, runConfig) {
   for (let i = 0; i < config.daysToCheck; i++) {
     for (const entry of maps[i].get('checkins')) {
       const phonesAndPreviousStays = await getPhonesAndPreviousStaysFromLink(page, entry.link);
-      if (i === 0) {
-        entry.phones = phonesAndPreviousStays.phones;
-      }
+      entry.phones = phonesAndPreviousStays.phones;
+      entry.customerNotes = phonesAndPreviousStays.customerNotes;
       entry.previousStays = phonesAndPreviousStays.previousStays;
     }
   }
   for (const entry of maps[0].get('stayovers')) {
-    entry.phones = await getPhonesFromLink(page, entry.link);
+    const customerInformation = await getCustomerInformation(page, entry.link);
+    entry.phones = customerInformation.phones;
   }
   const areEveningGuests = maps[0].get('checkins').length > 0 || maps[0].get('stayovers').length > 0;
   const areBreakfastGuests = maps[0].get('stayovers').length > 0 || maps[0].get('checkouts').length > 0;
@@ -312,13 +312,15 @@ function getNextEmbedColor() {
 }
 
 async function getPhonesAndPreviousStaysFromLink(page, link) {
+  const customerInformation = await getCustomerInformation(page, link);
   return {
-    phones: await getPhonesFromLink(page, link),
+    phones: customerInformation.phones,
+    customerNotes: customerInformation.customerNotes,
     previousStays: await getPreviousStays(page)
   }
 }
 
-async function getPhonesFromLink(page, link) {
+async function getCustomerInformation(page, link) {
   await page.goto(link);
   try {
     await page.waitForSelector('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-body');
@@ -326,12 +328,16 @@ async function getPhonesFromLink(page, link) {
     logger.error('Selector for Phone Numbers failed');
     return ['ERROR'];
   }
+  const customerNotes = await getInnerHtml(await page.$('div.customer-field:nth-child(4) > div:nth-child(2)'));
   const phoneElements = Array.from(await page.$$('.customer-phone > .component > a'));
   const phones = new Set();
   for (const phone of phoneElements) {
     phones.add(cleanPhone(await getInnerHtml(page, phone)));
   }
-  return Array.from(phones);
+  return {
+    phones: Array.from(phones),
+    customerNotes: customerNotes
+  };
 }
 
 async function getPreviousStays(page) {
@@ -472,6 +478,9 @@ function getMessageForDay(day, map) {
         for (const note of entry.notes) {
           embed.addField({name: note.name, value: note.value, inline: false});
         }
+      }
+      if (entry.customerNotes && entry.customerNotes !== '--') {
+        embed.addField({name: 'Customer Notes', value: entry.customerNotes, inline: false});
       }
       if (entry.phones) {
         let phones = '';
