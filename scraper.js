@@ -328,7 +328,7 @@ async function getCustomerInformation(page, link) {
     logger.error('Selector for Phone Numbers failed');
     return ['ERROR'];
   }
-  const customerNotes = await getInnerHtml(await page.$('div.customer-field:nth-child(4) > div:nth-child(2)'));
+  const customerNotes = (await getInnerHtml(await page.$('div.customer-field:nth-child(4) > div:nth-child(2)'))).replace('<br>', '');
   const phoneElements = Array.from(await page.$$('.customer-phone > .component > a'));
   const phones = new Set();
   for (const phone of phoneElements) {
