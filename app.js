@@ -12,6 +12,7 @@ import * as ntfy from './ntfy.js';
 let secrets;
 let config;
 let logger;
+let secretsFilePath;
 
 function delay(time) {
   return new Promise(resolve => setTimeout(resolve, time));
@@ -71,9 +72,11 @@ async function initialize() {
   let secretsFile;
   try {
     secretsFile = fs.readFileSync('./config/secrets.yml', 'utf-8');
+    secretsFilePath = './config/secrets.yml';
   } catch (e) {
     logger.info('secrets.yml not found in volume.  Using bundled file.');
     secretsFile = fs.readFileSync('./secrets.yml', 'utf-8');
+    secretsFilePath = './secrets.yml';
   }
   secrets = yaml.parse(secretsFile);
   if (secrets.ntfy.user && secrets.ntfy.password) {
@@ -122,6 +125,20 @@ app.get('/scrape', (request, response) => {
   runScraper(runConfig).then(() => {
     logger.info('Manual scrape process finished.');
   });
+});
+
+app.get('/update', (request, response) => {
+  const query = request.query;
+  const password = query?.password;
+  if (password) {
+    const sanitizedPassword = password.replace(/\$/g, '$$$$');
+    let secretsText = fs.readFileSync(secretsFilePath, 'utf-8');
+    const newSecretsText = secretsText.replace(/^(password:\s*).*$/m, '$1' + sanitizedPassword);
+    fs.writeFileSync(secretsFilePath, newSecretsText);
+    response.send('Password updated.');
+  } else {
+    response.send('Password not updated. Please supply a password as a request parameter.');
+  }
 });
 
 function queryParameterDoesNotExistOrIsTrue(query, parameter) {
