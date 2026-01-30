@@ -132,6 +132,7 @@ app.get('/update', (request, response) => {
   const password = query?.password;
   if (password) {
     const sanitizedPassword = password.replace(/\$/g, '$$$$');
+    secrets.password = sanitizedPassword;
     let secretsText = fs.readFileSync(secretsFilePath, 'utf-8');
     const newSecretsText = secretsText.replace(/^(password:\s*).*$/m, '$1' + sanitizedPassword);
     fs.writeFileSync(secretsFilePath, newSecretsText);
