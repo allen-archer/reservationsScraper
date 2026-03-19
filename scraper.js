@@ -1,4 +1,6 @@
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+puppeteer.use(StealthPlugin());
 import {Webhook, EmbedBuilder} from '@tycrek/discord-hookr';
 import * as mqttService from './mqttService.js';
 import {TOTP} from 'totp-generator';
