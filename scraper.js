@@ -149,11 +149,11 @@ function getDateString(date) {
 
 async function login(browser) {
   const page = await browser.newPage();
-  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36');
   await page.goto(secrets.loginUrl);
   try {
     await page.waitForSelector('button[type=submit]');
   } catch (e) {
+    await page.screenshot({path: 'screenshots/error_login_button.png'});
     throw 'Selector for login button failed';
   }
   await page.type('#username', secrets.username);
@@ -167,6 +167,7 @@ async function login(browser) {
     ]);
     await page.waitForSelector(`#code, ${frontDeskLinkSelector}`);
   } catch (e) {
+    await page.screenshot({path: 'screenshots/error_login_otp.png'});
     throw 'Selector for OTP or Front Desk link on Calendar page failed';
   }
   const codeInput = await page.$('#code');
@@ -187,6 +188,7 @@ async function login(browser) {
       ]);
       await page.waitForSelector(frontDeskLinkSelector);
     } catch (e) {
+      await page.screenshot({path: 'screenshots/error_login_post_otp.png'});
       throw 'Selector for Front Desk link on Calendar page failed after OTP entered';
     }
   }
@@ -203,6 +205,7 @@ async function scrapeGuestData(page, runConfig) {
     ]);
     await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2');
   } catch (e) {
+    await page.screenshot({path: 'screenshots/error_front_desk_nav.png'});
     throw 'Selector for Arrivals header on Front Desk page first iteration failed';
   }
   let date = getScrapeDate(runConfig);
@@ -223,6 +226,7 @@ async function scrapeGuestData(page, runConfig) {
         ]);
         await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2');
       } catch (e) {
+        await page.screenshot({path: 'screenshots/error_front_desk_date.png'});
         throw 'Selector for Arrivals header on Front Desk page second iteration failed';
       }
     }
@@ -328,6 +332,7 @@ async function getCustomerInformation(page, link) {
     await page.waitForSelector('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-body');
   } catch (e) {
     logger.error('Selector for Phone Numbers failed');
+    await page.screenshot({path: 'screenshots/error_customer_info.png'});
     return ['ERROR'];
   }
   const customerNotes = (await getInnerHtml(await page.$('div.customer-field:nth-child(4) > div:nth-child(2)'))).replace('<br>', '');
@@ -352,6 +357,7 @@ async function getPreviousStays(page) {
     await page.waitForSelector('#app > div > div.application-body > div > div.customer-details-page-body > div > div > table > tbody');
   } catch (e) {
       logger.error('Wait for selector failed on previous stays table');
+      await page.screenshot({path: 'screenshots/error_previous_stays.png'});
       return 'ERROR';
   }
   const table = await page.$('#app > div > div.application-body > div > div.customer-details-page-body > div > div > table > tbody');
