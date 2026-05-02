@@ -4,6 +4,8 @@ puppeteer.use(StealthPlugin());
 import {Webhook, EmbedBuilder} from '@tycrek/discord-hookr';
 import * as mqttService from './mqttService.js';
 import {TOTP} from 'totp-generator';
+import {generatePassword, savePassword} from './password.js';
+import {sendScraperErrorNotification} from './ntfy.js'
 
 let config;
 let secrets;
@@ -165,15 +167,37 @@ async function login(browser) {
       page.waitForNavigation({waitUntil: 'networkidle0'}),
       button.click()
     ]);
-    await page.waitForSelector(`#code, ${frontDeskLinkSelector}`);
+    await page.waitForSelector(`#code, #password-reset, ${frontDeskLinkSelector}`);
   } catch (e) {
     await page.screenshot({path: 'screenshots/error_login_otp.png'});
     throw 'Selector for OTP or Front Desk link on Calendar page failed';
   }
+  if (await page.$('#password-reset')) {
+    await page.screenshot({path: 'screenshots/password_reset.png'});
+    logger.info('Password expired, generating new password and resetting.');
+    const newPassword = generatePassword();
+    try {
+      await page.waitForSelector('#new-password');
+      await page.type('#new-password', newPassword);
+      await page.type('#re-enter-password', newPassword);
+      const resetButton = await page.$('button[type=submit]');
+      await Promise.all([
+        page.waitForNavigation({waitUntil: 'networkidle0'}),
+        resetButton.click()
+      ]);
+      await page.waitForSelector(`#code, ${frontDeskLinkSelector}`);
+      sendScraperErrorNotification(`New password generated: ${newPassword}`);
+    } catch (e) {
+      await page.screenshot({path: 'screenshots/error_password_reset.png'});
+      throw 'Password reset failed';
+    }
+    savePassword(newPassword, secrets);
+    logger.info('Password reset and saved to secrets.');
+  }
   const codeInput = await page.$('#code');
   if (codeInput) {
     const { otp, expires } = TOTP.generate(secrets.totp.secret);
-    logger.info(`OTP was required, generated code ${otp} which expires at ${expires}`);
+    logger.info(`OTP entered.`);
     await page.type('#code', otp);
     const rememberBrowser = await page.$('#rememberBrowser');
     if (!await isElementChecked(page, rememberBrowser)) {

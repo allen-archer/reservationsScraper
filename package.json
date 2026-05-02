@@ -15,6 +15,7 @@
     "discord.js": "^14.16.3",
     "express": "^4.21.1",
     "fetch": "^1.1.0",
+    "generate-password": "^1.7.1",
     "imap": "^0.8.19",
     "mqtt": "^5.10.2",
     "node-cron": "^3.0.3",

@@ -8,6 +8,7 @@ import yaml from 'yaml';
 import * as scraper from './scraper.js';
 import * as mqttService from './mqttService.js';
 import * as ntfy from './ntfy.js';
+import * as password from './password.js';
 
 let secrets;
 let config;
@@ -85,6 +86,7 @@ async function initialize() {
     secrets.ntfy.token = `Bearer ${secrets.ntfy.token}`;
   }
   mqttService.initialize(mqttConfig, config, secrets, logger).then();
+  password.initialize(secretsFilePath);
   scraper.initialize(config, secrets, logger).then();
   ntfy.initialize(config, secrets, logger).then();
   app.listen(config.port, () => {
@@ -129,13 +131,9 @@ app.get('/scrape', (request, response) => {
 
 app.get('/update', (request, response) => {
   const query = request.query;
-  const password = query?.password;
-  if (password) {
-    const sanitizedPassword = password.replace(/\$/g, '$$$$');
-    secrets.password = sanitizedPassword;
-    let secretsText = fs.readFileSync(secretsFilePath, 'utf-8');
-    const newSecretsText = secretsText.replace(/^(password:\s*).*$/m, '$1' + sanitizedPassword);
-    fs.writeFileSync(secretsFilePath, newSecretsText);
+  const newPassword = query?.password;
+  if (newPassword) {
+    password.savePassword(newPassword, secrets);
     response.send('Password updated.');
   } else {
     response.send('Password not updated. Please supply a password as a request parameter.');
