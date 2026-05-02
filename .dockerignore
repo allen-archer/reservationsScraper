@@ -1,0 +1,5 @@
+node_modules
+app.log
+screenshots
+secrets.yml
+config
