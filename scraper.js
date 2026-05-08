@@ -32,6 +32,7 @@ async function initialize(_config, _secrets, _logger) {
 async function runScraper(runConfig) {
   const browser = await puppeteer.launch({
     headless: 'new',
+    userDataDir: '/puppeteer/config/browser-profile',
     args: [
       '--disable-gpu',
       '--disable-dev-shm-usage',
@@ -158,8 +159,9 @@ async function login(browser) {
     await page.screenshot({path: 'screenshots/error_login_button.png'});
     throw 'Selector for login button failed';
   }
-  await page.type('#username', secrets.username);
-  await page.type('#password', secrets.password);
+  await page.type('#username', secrets.username, {delay: 80 + Math.random() * 60}); // 80-140 ms delay between key strokes
+  await page.type('#password', secrets.password, {delay: 80 + Math.random() * 60});
+  await delay(500 + Math.random() * 500); // 0.5-1 s delay between entering username and password and clicking login
   await page.screenshot({path: 'screenshots/login.png'});
   const button = await page.$('button[type=submit]');
   try {
@@ -197,10 +199,11 @@ async function login(browser) {
   const codeInput = await page.$('#code');
   if (codeInput) {
     const { otp, expires } = TOTP.generate(secrets.totp.secret);
-    logger.info(`OTP entered.`);
+    logger.info('OTP entered.');
     await page.type('#code', otp);
     const rememberBrowser = await page.$('#rememberBrowser');
     if (!await isElementChecked(page, rememberBrowser)) {
+      logger.info('Clicking remember browser.')
       await rememberBrowser.click();
     }
     await page.screenshot({path: 'screenshots/otp.png'});
