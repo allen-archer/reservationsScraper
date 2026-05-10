@@ -154,10 +154,15 @@ async function login(browser) {
   const page = await browser.newPage();
   await page.goto(secrets.loginUrl);
   try {
-    await page.waitForSelector('button[type=submit]');
+    await page.waitForSelector(`button[type=submit], ${frontDeskLinkSelector}`);
   } catch (e) {
     await page.screenshot({path: 'screenshots/error_login_button.png'});
     throw 'Selector for login button failed';
+  }
+  if (await page.$(frontDeskLinkSelector)) {
+    logger.info('Already logged in, skipping login.');
+    await page.screenshot({path: 'screenshots/calendar.png'});
+    return page;
   }
   await page.type('#username', secrets.username, {delay: 80 + Math.random() * 60}); // 80-140 ms delay between key strokes
   await page.type('#password', secrets.password, {delay: 80 + Math.random() * 60});
