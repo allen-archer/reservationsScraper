@@ -107,8 +107,8 @@ async function initialize() {
 async function initializeLogger(path) {
   return createLogger({
     format: format.combine(
-        format.timestamp({format: () => new Date().toLocaleString('en-US', {timeZone: config.timezone})}),
-        format.json()
+        format.timestamp({format: () => new Date().toLocaleString('en-US', {timeZone: config.timezone, hour12: false})}),
+        format.printf(({timestamp, level, message}) => `${timestamp} [${level.toUpperCase()}] ${message}`)
     ),
     transports: [new transports.File({filename: path})],
     exceptionHandlers: [new transports.File({filename: path})],
