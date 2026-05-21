@@ -20,7 +20,7 @@ function delay(time) {
 }
 
 async function runScraper(runConfig) {
-  logger.info('Starting run');
+  logger.info('Run started.');
   let success = false;
   let i = 0;
   let maxTries = config.maxTries;
@@ -40,7 +40,9 @@ async function runScraper(runConfig) {
   }
   if (!success) {
     ntfy.sendScraperErrorNotification(error);
-    logger.error('Failed to run ' + maxTries + ' times');
+    logger.error('Run failed.');
+  } else {
+    logger.info('Run finished.')
   }
 }
 
@@ -90,7 +92,7 @@ async function initialize() {
   scraper.initialize(config, secrets, logger).then();
   ntfy.initialize(config, secrets, logger).then();
   app.listen(config.port, () => {
-    logger.info('server listening on port: ' + config.port);
+    logger.info(`Server listening on port: ${config.port}.`);
   });
   cron.schedule(config.cronExpression, async () => {
     const runConfig = {
@@ -107,7 +109,7 @@ async function initialize() {
 async function initializeLogger(path) {
   return createLogger({
     format: format.combine(
-        format.timestamp({format: () => new Date().toLocaleString('en-US', {timeZone: config.timezone, hour12: false})}),
+        format.timestamp({format: () => new Date().toLocaleString('en-US', {timeZone: config.timezone, hour12: false}).replace(',', '')}),
         format.printf(({timestamp, level, message}) => `${timestamp} [${level.toUpperCase()}] ${message}`)
     ),
     transports: [new transports.File({filename: path})],

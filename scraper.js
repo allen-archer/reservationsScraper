@@ -82,7 +82,7 @@ async function doRun(browser, runConfig) {
 }
 
 async function doBlackouts(page, runConfig) {
-  logger.info('Running Blackouts');
+  logger.info('Starting blackouts.');
   const rooms = secrets.blackouts.roomNames;
   await page.goto(secrets.blackouts.url);
   await page.waitForSelector('[class="blackout-room-id-date"]');
@@ -112,7 +112,7 @@ async function doBlackouts(page, runConfig) {
           if (containedNames.has(room)) {
             // Remove the room from the potential blackout targets for this day
             roomSet.delete(room);
-            logger.info(`Removing room name: ${room} because ${comboName} is occupied`);
+            logger.info(`Removing room name: ${room} because ${comboName} is occupied.`);
           }
         }
       }
@@ -229,6 +229,7 @@ async function login(browser) {
 }
 
 async function scrapeGuestData(page, runConfig) {
+  logger.info('Starting scrape process.')
   const maps = [];
   try {
     await Promise.all([
