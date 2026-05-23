@@ -31,7 +31,7 @@ async function initialize(_config, _secrets, _logger) {
 
 async function runScraper(runConfig) {
   const browser = await puppeteer.launch({
-    headless: 'new',
+    headless: runConfig?.headless ?? 'new',
     userDataDir: '/app/config/browser-profile',
     args: [
       '--disable-gpu',
@@ -135,11 +135,21 @@ async function doBlackouts(page, runConfig) {
     date.setDate(date.getDate() - 2);
     doCheck = false;
   }
-  const saveButton = await page.$('button[class="save"]');
-  await Promise.all([
-    page.waitForNavigation({waitUntil: 'networkidle0'}),
-    saveButton.click()
-  ]);
+  if (runConfig?.dryRun) {
+    logger.info('Dry run: skipping blackout save.');
+    const cancelButton = await page.$('button[class="cancel"]');
+    page.once('dialog', dialog => dialog.accept());
+    await Promise.all([
+      page.waitForNavigation({waitUntil: 'networkidle0'}),
+      cancelButton.click()
+    ]);
+  } else {
+    const saveButton = await page.$('button[class="save"]');
+    await Promise.all([
+      page.waitForNavigation({waitUntil: 'networkidle0'}),
+      saveButton.click()
+    ]);
+  }
   await page.waitForSelector('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a');
 }
 
@@ -327,6 +337,10 @@ async function scrapeGuestData(page, runConfig) {
     }
   }
   const phoneNumberMap = combineAllPhoneNumbers(maps[0], secrets);
+  if (runConfig?.dryRun) {
+    logger.info('Dry run: skipping MQTT and Discord sends.');
+    return;
+  }
   mqttService.changeDeviceState('evening guests', areEveningGuests).then();
   mqttService.changeDeviceState('breakfast guests', areBreakfastGuests).then();
   for (const key of occupancyMap.keys()) {
@@ -647,4 +661,4 @@ function delay(time) {
   return new Promise(resolve => setTimeout(resolve, time));
 }
 
-export {initialize, runScraper}
+export {initialize, runScraper, cleanPhone, cleanName, cleanRoom, cleanNights, cleanPaid, getDateString, combineAllPhoneNumbers}

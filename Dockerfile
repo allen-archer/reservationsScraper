@@ -1,4 +1,6 @@
-FROM ghcr.io/puppeteer/puppeteer:23.9.0
+FROM ghcr.io/puppeteer/puppeteer:25.0.4
+
+ENV PUPPETEER_CACHE_DIR=/home/pptruser/.cache/puppeteer
 
 WORKDIR /app
 EXPOSE 3000

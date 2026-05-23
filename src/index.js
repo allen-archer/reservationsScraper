@@ -111,7 +111,9 @@ app.get('/scrape', (request, response) => {
   const runConfig = {
     doBlackouts: queryParameterDoesNotExistOrIsTrue(query, 'doBlackouts'),
     doScrapeGuestData: queryParameterDoesNotExistOrIsTrue(query, 'doScrapeGuestData'),
-    dateAdjust: query.dateAdjust
+    dateAdjust: query.dateAdjust,
+    dryRun: query.dryRun === 'true',
+    headless: query.headless === 'false' ? false : 'new'
   }
   response.send('Scrape process started');
   runScraper(runConfig).then(() => {
