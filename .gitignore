@@ -1,1 +1,6 @@
 .idea/
+node_modules/
+app.log
+config/app.log
+config/secrets.yml
+screenshots/

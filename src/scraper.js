@@ -2,7 +2,7 @@ import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 puppeteer.use(StealthPlugin());
 import {Webhook, EmbedBuilder} from '@tycrek/discord-hookr';
-import * as mqttService from './mqttService.js';
+import * as mqttService from './mqtt.js';
 import {TOTP} from 'totp-generator';
 import {generatePassword, savePassword} from './password.js';
 import {sendScraperErrorNotification} from './ntfy.js'
@@ -32,7 +32,7 @@ async function initialize(_config, _secrets, _logger) {
 async function runScraper(runConfig) {
   const browser = await puppeteer.launch({
     headless: 'new',
-    userDataDir: '/puppeteer/config/browser-profile',
+    userDataDir: '/app/config/browser-profile',
     args: [
       '--disable-gpu',
       '--disable-dev-shm-usage',

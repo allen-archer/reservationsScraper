@@ -1,14 +1,14 @@
 import express from 'express';
-
-const app = express();
 import cron from 'node-cron';
 import {createLogger, format, transports} from 'winston';
 import fs from 'fs';
 import yaml from 'yaml';
 import * as scraper from './scraper.js';
-import * as mqttService from './mqttService.js';
+import * as mqttService from './mqtt.js';
 import * as ntfy from './ntfy.js';
 import * as password from './password.js';
+
+const app = express();
 
 let secrets;
 let config;
@@ -50,37 +50,25 @@ async function initialize() {
   let configLoadedFromVolume = true;
   let configFile;
   try {
-    configFile = fs.readFileSync('./config/config.yml', 'utf-8');
+    configFile = fs.readFileSync('/app/config/config.yml', 'utf-8');
   } catch (e) {
     configLoadedFromVolume = false;
-    configFile = fs.readFileSync('./config.yml', 'utf-8');
+    configFile = fs.readFileSync('config.yml', 'utf-8');
   }
   config = yaml.parse(configFile);
-  try {
-    logger = await initializeLogger('./config/app.log');
-  } catch (e) {
-    logger = await initializeLogger('app.log');
-  }
+  logger = await initializeLogger('/app/config/app.log');
   if (!configLoadedFromVolume) {
     logger.info('config.yml not found in volume.  Using bundled file.');
   }
   let mqttConfigFile;
   try {
-    mqttConfigFile = fs.readFileSync('./config/mqttConfig.json', 'utf-8');
+    mqttConfigFile = fs.readFileSync('/app/config/mqttConfig.json', 'utf-8');
   } catch (e) {
     logger.info('mqttConfig.json not found in volume.  Using bundled file.');
-    mqttConfigFile = fs.readFileSync('./mqttConfig.json', 'utf-8');
+    mqttConfigFile = fs.readFileSync('mqttConfig.json', 'utf-8');
   }
-  let mqttConfig = JSON.parse(mqttConfigFile);
-  let secretsFile;
-  try {
-    secretsFile = fs.readFileSync('./config/secrets.yml', 'utf-8');
-    secretsFilePath = './config/secrets.yml';
-  } catch (e) {
-    logger.info('secrets.yml not found in volume.  Using bundled file.');
-    secretsFile = fs.readFileSync('./secrets.yml', 'utf-8');
-    secretsFilePath = './secrets.yml';
-  }
+  const mqttConfig = JSON.parse(mqttConfigFile);
+  const secretsFile = fs.readFileSync('/app/config/secrets.yml', 'utf-8');
   secrets = yaml.parse(secretsFile);
   if (secrets.ntfy.user && secrets.ntfy.password) {
     secrets.ntfy.basicAuth = `Basic ${Buffer.from(secrets.ntfy.user + ':' + secrets.ntfy.password, 'utf8').toString('base64')}`;
@@ -112,9 +100,9 @@ async function initializeLogger(path) {
         format.timestamp({format: () => new Date().toLocaleString('en-US', {timeZone: config.timezone, hour12: false}).replace(',', '')}),
         format.printf(({timestamp, level, message}) => `${timestamp} [${level.toUpperCase()}] ${message}`)
     ),
-    transports: [new transports.File({filename: path})],
-    exceptionHandlers: [new transports.File({filename: path})],
-    rejectionHandlers: [new transports.File({filename: path})]
+    transports: [new transports.Console(), new transports.File({filename: path})],
+    exceptionHandlers: [new transports.Console(), new transports.File({filename: path})],
+    rejectionHandlers: [new transports.Console(), new transports.File({filename: path})]
   });
 }
 
