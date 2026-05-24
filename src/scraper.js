@@ -213,7 +213,7 @@ async function login(browser) {
   }
   const codeInput = await page.$('#code');
   if (codeInput) {
-    const { otp, expires } = TOTP.generate(secrets.totp.secret);
+    const { otp, expires } = await TOTP.generate(secrets.totp.secret);
     logger.info('OTP entered.');
     await page.type('#code', otp);
     const rememberBrowser = await page.$('#rememberBrowser');
