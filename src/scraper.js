@@ -344,6 +344,10 @@ async function scrapeGuestData(page, runConfig) {
   const phoneNumberMap = combineAllPhoneNumbers(maps[0], secrets);
   if (runConfig?.dryRun) {
     logger.info('Dry run: skipping MQTT and Discord sends.');
+    logger.info(`evening guests: ${areEveningGuests}`);
+    logger.info(`breakfast guests: ${areBreakfastGuests}`);
+    logger.info(`occupancy:\n${[...occupancyMap.entries()].map(([k, v]) => ` -- ${k}:${JSON.stringify(v)}`).join('\n')}`);
+    logger.info(`phones:\n${[...phoneNumberMap.entries()].map(([k, v]) => ` -- ${k}:${JSON.stringify(v)}`).join('\n')}`);
     return;
   }
   mqttService.changeDeviceState('evening guests', areEveningGuests).then();
