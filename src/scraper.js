@@ -174,12 +174,17 @@ async function login(browser) {
     await page.screenshot({path: 'screenshots/calendar.png'});
     return page;
   }
-  await page.type('#username', secrets.username, {delay: 80 + Math.random() * 60}); // 80-140 ms delay between key strokes
-  await page.type('#password', secrets.password, {delay: 80 + Math.random() * 60});
-  await delay(500 + Math.random() * 500); // 0.5-1 s delay between entering username and password and clicking login
-  await page.screenshot({path: 'screenshots/login.png'});
-  const button = await page.$('button[type=submit]');
   try {
+    await page.type('#username', secrets.username, {delay: 80 + Math.random() * 60}); // 80-140 ms delay between key strokes
+    await page.type('#password', secrets.password, {delay: 80 + Math.random() * 60});
+    await delay(500 + Math.random() * 500); // 0.5-1 s delay between entering username and password and clicking login
+    await page.screenshot({path: 'screenshots/login.png'});
+  } catch (e) {
+    await page.screenshot({path: 'screenshots/error_login.png'});
+    throw 'There was an error entering login information';
+  }
+  try {
+    const button = await page.$('button[type=submit]');
     await Promise.all([
       page.waitForNavigation({waitUntil: 'networkidle0'}),
       button.click()
@@ -260,8 +265,8 @@ async function scrapeGuestData(page, runConfig) {
       const month = date.toLocaleString('en-US', {month: 'short'});
       const dateString = `${month} ${date.getDate()}, ${date.getFullYear()}`;
       const dateInput = await page.$('#date_input_input');
-      await dateInput.click({clickCount: 3}); // click 3 times to select all text
-      await dateInput.type(dateString); // to then overwrite that text
+      await dateInput.evaluate(element => element.select());
+      await dateInput.type(dateString);
       try {
         await Promise.all([
           page.waitForNavigation({waitUntil: ['networkidle0','domcontentloaded']}),
