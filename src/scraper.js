@@ -161,7 +161,8 @@ function getDateString(date) {
 }
 
 async function login(browser) {
-  const page = await browser.newPage();
+  const pages = await browser.pages();
+  const page = pages.length > 0 ? pages[0] : await browser.newPage();
   await page.goto(secrets.loginUrl);
   try {
     await page.waitForSelector(`button[type=submit], ${frontDeskLinkSelector}`);
