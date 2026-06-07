@@ -35,6 +35,7 @@ async function runScraper(runConfig) {
   const browser = await puppeteer.launch({
     headless: runConfig?.headless ?? 'new',
     userDataDir: '/app/config/browser-profile',
+    protocolTimeout: 120000,
     args: [
       '--disable-gpu',
       '--disable-dev-shm-usage',
@@ -43,6 +44,7 @@ async function runScraper(runConfig) {
       '--disable-accelerated-2d-canvas',
       '--no-first-run',
       '--no-zygote',
+      '--disk-cache-size=0',
       '--window-size=1920,1080'
     ],
     defaultViewport: {
@@ -55,6 +57,8 @@ async function runScraper(runConfig) {
   } catch (e) {
     throw e;
   } finally {
+    const pages = await browser.pages();
+    await Promise.all(pages.map(p => p.close()));
     await browser.close();
   }
 }
