@@ -4,6 +4,7 @@ import {createLogger, format, transports} from 'winston';
 import fs from 'fs';
 import yaml from 'yaml';
 import * as scraper from './scraper.js';
+import * as guestDatabase from './guestdatabase.js';
 import * as mqttService from './mqtt.js';
 import * as ntfy from './ntfy.js';
 import * as password from './password.js';
@@ -79,6 +80,7 @@ async function initialize() {
   password.initialize(secretsFilePath);
   scraper.initialize(config, secrets, logger).then();
   ntfy.initialize(config, secrets, logger).then();
+  guestDatabase.initialize(secrets, logger).then();
   app.listen(config.port, () => {
     logger.info(`Server listening on port: ${config.port}.`);
   });

@@ -1,11 +1,13 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-puppeteer.use(StealthPlugin());
 import {Webhook, EmbedBuilder} from '@tycrek/discord-hookr';
 import * as mqttService from './mqtt.js';
 import {TOTP} from 'totp-generator';
 import {generatePassword, savePassword} from './password.js';
 import {sendScraperErrorNotification} from './ntfy.js'
+import * as guestDatabase from './guestdatabase.js'
+
+puppeteer.use(StealthPlugin());
 
 let config;
 let secrets;
@@ -41,8 +43,7 @@ async function runScraper(runConfig) {
       '--disable-accelerated-2d-canvas',
       '--no-first-run',
       '--no-zygote',
-      // '--single-process', // I don't know why, but after upgrading to puppeteer 19, this is causing the browser to crash
-      '--window-size=1920,1080' // default is 800x600
+      '--window-size=1920,1080'
     ],
     defaultViewport: {
       width: 1920,
@@ -163,7 +164,7 @@ function getDateString(date) {
 async function login(browser) {
   const pages = await browser.pages();
   const page = pages.length > 0 ? pages[0] : await browser.newPage();
-  await page.goto(secrets.loginUrl);
+  await page.goto(secrets.loginUrl, {waitUntil: 'networkidle0'});
   try {
     await page.waitForSelector(`button[type=submit], ${frontDeskLinkSelector}`);
   } catch (e) {
@@ -219,7 +220,7 @@ async function login(browser) {
   }
   const codeInput = await page.$('#code');
   if (codeInput) {
-    const { otp, expires } = await TOTP.generate(secrets.totp.secret);
+    const {otp, expires} = await TOTP.generate(secrets.totp.secret);
     logger.info('OTP entered.');
     await page.type('#code', otp);
     const rememberBrowser = await page.$('#rememberBrowser');
@@ -246,12 +247,10 @@ async function login(browser) {
 
 async function scrapeGuestData(page, runConfig) {
   logger.info('Starting scrape process.')
-  const maps = [];
+  const confirmationCodesSet = new Set();
   try {
-    await Promise.all([
-      page.waitForNavigation({waitUntil: 'networkidle0'}),
-      page.click('#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a')
-    ]);
+    const frontDeskUrl = await page.$eval(frontDeskLinkSelector, el => el.href);
+    await page.goto(frontDeskUrl, {waitUntil: 'networkidle0'});
     await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2');
   } catch (e) {
     await page.screenshot({path: 'screenshots/error_front_desk_nav.png'});
@@ -270,7 +269,7 @@ async function scrapeGuestData(page, runConfig) {
       await dateInput.type(dateString);
       try {
         await Promise.all([
-          page.waitForNavigation({waitUntil: ['networkidle0','domcontentloaded']}),
+          page.waitForNavigation({waitUntil: ['networkidle0', 'domcontentloaded']}),
           page.click('#app > div > div.application-body > div > div.component.front-desk-form > form > div.component.tr-button.presentation-standard.precedence-primary > button > div > div')
         ]);
         await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2');
@@ -280,90 +279,220 @@ async function scrapeGuestData(page, runConfig) {
       }
     }
     await page.screenshot({path: `screenshots/frontDesk${i}.png`});
-    maps.push(await getMapForDay(page));
+    const codes = await page.$$eval('td.booking-confirmation-id a', els => els.map(el => el.textContent.trim()));
+    codes.forEach(code => confirmationCodesSet.add(code));
   }
+  logger.info(confirmationCodesSet.size > 0 ? `Confirmation codes scraped: ${[...confirmationCodesSet].join(', ')}` : 'No confirmation codes scraped.');
+  let confirmationCodesToEnrich;
+  try {
+    confirmationCodesToEnrich = await guestDatabase.getConfirmationCodesWithoutGuest();
+    logger.info(confirmationCodesToEnrich.length > 0 ? `Confirmation codes to enrich: ${confirmationCodesToEnrich.join(', ')}` : 'No confirmation codes to enrich.');
+  } catch (e) {
+    logger.error(`Error fetching confirmation codes from guest database: ${e}`)
+  }
+  const confirmationCodeResponses = [];
+  const allConfirmationCodes = [...new Set([...confirmationCodesSet, ...(confirmationCodesToEnrich ?? [])])];
+  await goToSearchPage(page);
+  for (const code of allConfirmationCodes) {
+    try {
+      const searchInput = await page.$('input[name="term"]');
+      await searchInput.evaluate(element => element.select());
+      await searchInput.type(code, {delay: 50});
+      const [response] = await Promise.all([
+        page.waitForResponse(
+            res => res.url().includes('/bills/search') && res.status() === 200,
+            {timeout: 15000}
+        ),
+        page.$eval('button[type="submit"]', btn => btn.click())
+      ]);
+      const data = await response.json();
+      confirmationCodeResponses.push({
+        code: code,
+        data: data[0]
+      });
+    } catch (e) {
+      await page.screenshot({path: 'screenshots/error_confirmation_code_search.png'});
+      throw `Error searching for confirmation code ${code}. ${confirmationCodeResponses.length} codes searched successfully of ${confirmationCodesSet.size}.`;
+    }
+  }
+  await guestDatabase.sendUpsertRequest(confirmationCodeResponses);
+  const scrapedResponses = confirmationCodeResponses.filter(r => confirmationCodesSet.has(r.code));
+  const baseDate = getScrapeDate(runConfig);
+  const messages = [];
   for (let i = 0; i < config.daysToCheck; i++) {
-    for (const entry of maps[i].get('checkins')) {
-      const phonesAndPreviousStays = await getPhonesAndPreviousStaysFromLink(page, entry.link);
-      entry.phones = phonesAndPreviousStays.phones;
-      entry.customerNotes = phonesAndPreviousStays.customerNotes;
-      entry.previousStays = phonesAndPreviousStays.previousStays;
-    }
-  }
-  for (const entry of maps[0].get('stayovers')) {
-    const customerInformation = await getCustomerInformation(page, entry.link);
-    entry.phones = customerInformation.phones;
-  }
-  const areEveningGuests = maps[0].get('checkins').length > 0 || maps[0].get('stayovers').length > 0;
-  const areBreakfastGuests = maps[0].get('stayovers').length > 0 || maps[0].get('checkouts').length > 0;
-  const occupancyMap = new Map();
-  for (const roomName of secrets.roomNames) {
-    occupancyMap.set(roomName,
-        {
-          occupiedTonight: false,
-          checkingInToday: false
-        });
-  }
-  for (const entry of maps[0].get('checkins')) {
-    const rooms = []
-    if (entry.room.includes('-')) {
-      const split = entry.room.split('-');
-      for (const val of split) {
-        rooms.push(val);
+    const dayDate = new Date(baseDate);
+    dayDate.setDate(dayDate.getDate() + (isDayBefore ? i + 1 : i));
+    const dateString = getDateString(dayDate);
+    const checkins = classifyForDay(scrapedResponses, dateString, 'checkin');
+    const checkouts = classifyForDay(scrapedResponses, dateString, 'checkout');
+    const stayovers = classifyForDay(scrapedResponses, dateString, 'stayover');
+    if (i === 0) {
+      const areEveningGuests = checkins.length > 0 || stayovers.length > 0;
+      const areBreakfastGuests = stayovers.length > 0 || checkouts.length > 0;
+      const occupancyMap = buildOccupancyMap(checkins, stayovers, dateString);
+      const phoneNumberMap = buildPhoneNumberMap(checkins, stayovers);
+      if (runConfig?.dryRun) {
+        logger.info('Dry run: skipping MQTT send.');
+        logger.info(`evening guests: ${areEveningGuests}`);
+        logger.info(`breakfast guests: ${areBreakfastGuests}`);
+        logger.info(`occupancy:\n${[...occupancyMap.entries()].map(([k, v]) => ` -- ${k}:${JSON.stringify(v)}`).join('\n')}`);
+        logger.info(`phones:\n${[...phoneNumberMap.entries()].map(([k, v]) => ` -- ${k}:${JSON.stringify(v)}`).join('\n')}`);
+      } else {
+        mqttService.changeDeviceState('evening guests', areEveningGuests).then();
+        mqttService.changeDeviceState('breakfast guests', areBreakfastGuests).then();
+        for (const key of occupancyMap.keys()) {
+          mqttService.publishAttributes('occupancy ' + key, occupancyMap.get(key)).then();
+        }
+        mqttService.publishAttributes('occupancy phone numbers', Object.fromEntries(phoneNumberMap)).then();
       }
-    } else if (entry.room.toLowerCase().includes('whole')) {
-      for (const val of secrets.roomNames) {
-        rooms.push(val);
-      }
-    } else {
-      rooms.push(entry.room);
     }
-    for (const room of rooms) {
-      occupancyMap.get(room).occupiedTonight = true;
-      occupancyMap.get(room).checkingInToday = true;
-    }
+    messages.push(await buildDiscordMessage(dayDate, checkins, checkouts));
   }
-  for (const entry of maps[0].get('stayovers')) {
-    const rooms = [];
-    if (entry.room.includes('-')) {
-      const split = entry.room.split('-');
-      for (const val of split) {
-        rooms.push(val);
-      }
-    } else if (entry.room.toLowerCase().includes('whole')) {
-      for (const val of secrets.roomNames) {
-        rooms.push(val);
-      }
-    } else {
-      rooms.push(entry.room);
-    }
-    for (const room of rooms) {
-      occupancyMap.get(room).occupiedTonight = true;
-      occupancyMap.get(room).checkingInToday = false;
-    }
-  }
-  const phoneNumberMap = combineAllPhoneNumbers(maps[0], secrets);
   if (runConfig?.dryRun) {
-    logger.info('Dry run: skipping MQTT and Discord sends.');
-    logger.info(`evening guests: ${areEveningGuests}`);
-    logger.info(`breakfast guests: ${areBreakfastGuests}`);
-    logger.info(`occupancy:\n${[...occupancyMap.entries()].map(([k, v]) => ` -- ${k}:${JSON.stringify(v)}`).join('\n')}`);
-    logger.info(`phones:\n${[...phoneNumberMap.entries()].map(([k, v]) => ` -- ${k}:${JSON.stringify(v)}`).join('\n')}`);
+    logger.info('Dry run: skipping Discord webhook send.');
+    for (const message of messages) {
+      logger.info(`Discord message: ${JSON.stringify(message)}`);
+    }
     return;
   }
-  mqttService.changeDeviceState('evening guests', areEveningGuests).then();
-  mqttService.changeDeviceState('breakfast guests', areBreakfastGuests).then();
-  for (const key of occupancyMap.keys()) {
-    mqttService.publishAttributes('occupancy ' + key, occupancyMap.get(key)).then();
-  }
-  mqttService.publishAttributes('occupancy phone numbers',
-      Object.fromEntries(phoneNumberMap)).then();
-  const messages = createMessages(getScrapeDate(runConfig), maps, config.daysToCheck);
   for (const message of messages) {
     const webhook = new Webhook(secrets.scraper.webhook);
     webhook.setContent(message.content);
     webhook.addEmbed(message.embeds);
     await webhook.send();
+  }
+}
+
+function classifyForDay(responses, dateString, type) {
+  return responses.filter(r => {
+    if (!r.data || r.data.status === 'canceled') return false;
+    const bookings = r.data.bookings ?? [];
+    if (type === 'checkin') return bookings.some(b => b.startDate === dateString);
+    if (type === 'checkout') return bookings.some(b => b.endDate === dateString);
+    if (type === 'stayover') return bookings.some(b => b.startDate < dateString && b.endDate > dateString);
+  });
+}
+
+function getRoomsForOccupancy(roomName) {
+  if (roomName.includes('-')) return roomName.split('-');
+  if (roomName.toLowerCase().includes('whole')) return secrets.roomNames;
+  return [roomName];
+}
+
+function buildOccupancyMap(checkins, stayovers, dateString) {
+  const occupancyMap = new Map();
+  for (const roomName of secrets.roomNames) {
+    occupancyMap.set(roomName, {occupiedTonight: false, checkingInToday: false});
+  }
+  for (const r of checkins) {
+    for (const booking of (r.data.bookings ?? [])) {
+      if (booking.startDate === dateString) {
+        for (const room of getRoomsForOccupancy(cleanRoom(booking.room?.name ?? ''))) {
+          if (occupancyMap.has(room)) {
+            occupancyMap.get(room).occupiedTonight = true;
+            occupancyMap.get(room).checkingInToday = true;
+          }
+        }
+      }
+    }
+  }
+  for (const r of stayovers) {
+    for (const booking of (r.data.bookings ?? [])) {
+      if (booking.startDate < dateString && booking.endDate > dateString) {
+        for (const room of getRoomsForOccupancy(cleanRoom(booking.room?.name ?? ''))) {
+          if (occupancyMap.has(room)) {
+            occupancyMap.get(room).occupiedTonight = true;
+          }
+        }
+      }
+    }
+  }
+  return occupancyMap;
+}
+
+function buildPhoneNumberMap(checkins, stayovers) {
+  const phoneNumberMap = new Map();
+  for (const r of [...checkins, ...stayovers]) {
+    const customer = r.data.customer;
+    const phones = [customer.phone, customer.cellPhone, customer.workPhone].filter(Boolean).map(cleanPhone);
+    for (const booking of (r.data.bookings ?? [])) {
+      const roomNumber = secrets.roomNumberMap[cleanRoom(booking.room?.name ?? '')];
+      if (roomNumber) phoneNumberMap.set(roomNumber, phones);
+    }
+  }
+  return phoneNumberMap;
+}
+
+async function buildDiscordMessage(day, checkins, checkouts) {
+  const message = {
+    content: `__**${day.toLocaleString('en', {weekday: 'long'})}**__`,
+    embeds: []
+  };
+  if (checkins.length === 0) {
+    message.embeds.push(new EmbedBuilder().setDescription(':inbox_tray: :x:').setColor(getNextEmbedColor()));
+  } else {
+    for (const r of checkins) {
+      const data = r.data;
+      const customer = data.customer;
+      const booking = data.bookings?.[0];
+      const room = cleanRoom(booking?.room?.name ?? '');
+      const nights = booking
+          ? Math.round((new Date(booking.endDate) - new Date(booking.startDate)) / 86400000)
+          : '?';
+      const phones = [customer.phone, customer.cellPhone, customer.workPhone]
+          .filter(Boolean).map(cleanPhone).join(', ');
+      let previousStays = 'First time guest';
+      try {
+        const history = await guestDatabase.getGuestHistory(customer.id);
+        if (history.previousStayCount > 0) {
+          const last = history.lastStay;
+          previousStays = `${history.previousStayCount} previous stays, last on ${last.checkIn}-${last.checkOut} in ${last.rooms.map(cleanRoom).join(', ')}`;
+        }
+      } catch (e) {
+        logger.error(`Failed to get guest history for customer ${customer.id}: ${e}`);
+      }
+      const embed = new EmbedBuilder()
+          .setDescription(`:inbox_tray: ${customer.fullName} :inbox_tray:`)
+          .setFooter({text: previousStays})
+          .addField({name: 'Room', value: room, inline: true})
+          .addField({name: 'Nights', value: String(nights), inline: true})
+          .setColor(getNextEmbedColor());
+      if (data.additionalGuestNames) embed.addField({name: 'Additional Guest Names', value: data.additionalGuestNames, inline: false});
+      if (data.arrivalTime) embed.addField({name: 'Arrival Time', value: data.arrivalTime, inline: false});
+      if (data.dietaryRestrictions) embed.addField({name: 'Dietary Restrictions', value: data.dietaryRestrictions, inline: false});
+      if (data.specialAccommodations) embed.addField({name: 'Special Accommodations', value: data.specialAccommodations, inline: false});
+      const getAttr = name => data.attributeValues?.find(a => a.attribute.variableName === name)?.value || null;
+      const housekeepingNotes = getAttr('housekeeping_notes');
+      const reasonForStay = getAttr('reason_for_stay');
+      if (housekeepingNotes) embed.addField({name: 'Housekeeping Notes', value: housekeepingNotes, inline: false});
+      if (reasonForStay) embed.addField({name: 'Reason for Stay', value: reasonForStay, inline: false});
+      if (customer.notes) embed.addField({name: 'Customer Notes', value: customer.notes, inline: false});
+      if (phones) embed.addField({name: 'Phone', value: phones, inline: false});
+      message.embeds.push(embed);
+    }
+  }
+  if (checkouts.length === 0) {
+    message.embeds.push(new EmbedBuilder().setDescription(':outbox_tray: :x:').setColor(getNextEmbedColor()));
+  } else {
+    for (const r of checkouts) {
+      const customer = r.data.customer;
+      const room = cleanRoom(r.data.bookings?.[0]?.room?.name ?? '');
+      message.embeds.push(new EmbedBuilder()
+          .setDescription(`:outbox_tray: ${customer.fullName} :outbox_tray:`)
+          .addField({name: 'Room', value: room, inline: true})
+          .setColor(getNextEmbedColor()));
+    }
+  }
+  return message;
+}
+
+async function goToSearchPage(page) {
+  try {
+    await page.goto(secrets.searchUrl, {waitUntil: 'networkidle0'});
+    await page.waitForSelector('input[name="term"]');
+  } catch (e) {
+    await page.screenshot({path: 'screenshots/error_search_page_naviation.png'});
+    throw 'Error navigating to search page';
   }
 }
 
@@ -374,272 +503,13 @@ function getNextEmbedColor() {
   return embedColors[embedIndex++];
 }
 
-async function getPhonesAndPreviousStaysFromLink(page, link) {
-  const customerInformation = await getCustomerInformation(page, link);
-  return {
-    phones: customerInformation.phones,
-    customerNotes: customerInformation.customerNotes,
-    previousStays: await getPreviousStays(page)
-  }
-}
-
-async function getCustomerInformation(page, link) {
-  await page.goto(link);
-  try {
-    await page.waitForSelector('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-body');
-  } catch (e) {
-    logger.error('Selector for Phone Numbers failed');
-    await page.screenshot({path: 'screenshots/error_customer_info.png'});
-    return ['ERROR'];
-  }
-  const customerNotes = (await getInnerHtml(await page.$('div.customer-field:nth-child(4) > div:nth-child(2)'))).replace('<br>', '');
-  const phoneElements = Array.from(await page.$$('.customer-phone > .component > a'));
-  const phones = new Set();
-  for (const phone of phoneElements) {
-    phones.add(cleanPhone(await getInnerHtml(page, phone)));
-  }
-  return {
-    phones: Array.from(phones),
-    customerNotes: customerNotes
-  };
-}
-
-async function getPreviousStays(page) {
-  const date = new Date();
-  try {
-    await Promise.all([
-      page.waitForNavigation({waitUntil: 'domcontentloaded'}),
-      page.click('#app > div > div.application-body > div > div.reservation-page-body > div > div > div.reservation-details-column.customer > div.component.assign-customer > div.customer-header > div.customer-area > div.component.customer-name.small.has-link > a')
-    ]);
-    await page.waitForSelector('#app > div > div.application-body > div > div.customer-details-page-body > div > div > table > tbody');
-  } catch (e) {
-      logger.error('Wait for selector failed on previous stays table');
-      await page.screenshot({path: 'screenshots/error_previous_stays.png'});
-      return 'ERROR';
-  }
-  const table = await page.$('#app > div > div.application-body > div > div.customer-details-page-body > div > div > table > tbody');
-  if (table === null) {
-    logger.error('Table null for previous stays');
-    return 'ERROR';
-  }
-  const rows = await table.$$('tr');
-  const stays = [];
-  for (const row of rows) {
-    const totalString = await getInnerHtml(page, await row.$('td:nth-child(9) > a > div'));
-    if (totalString && totalString === '$0.00') {
-      // Not a real stay, don't count it.
-      continue;
-    }
-    const roomNameElements = await row.$$('td:nth-child(4) > a.visible > div');
-    const roomNames = [];
-    for (const room of roomNameElements) {
-      roomNames.push(cleanRoom(await getInnerHtml(page, room)));
-    }
-    const roomName = roomNames.join(', ');
-    const arrivalString = await getInnerHtml(page, await row.$('td:nth-child(5) > a > div'));
-    const departureString = await getInnerHtml(page, await row.$('td:nth-child(6) > a > div'));
-    const timestamp = Date.parse(departureString);
-    if (!isNaN(timestamp)) {
-      const stayDate = new Date(timestamp);
-      if (stayDate < date) {
-        stays.push([new Date(timestamp), arrivalString, departureString, roomName]);
-      }
-    }
-  }
-  const lastStay = stays?.sort(function(left, right) {
-    if (left[0] > right[0]) {
-      return -1;
-    } else if (left[0] < right[0]) {
-      return 1;
-    } else {
-      return 0;
-    }
-  })[0];
-  if (stays.length > 0) {
-    return `${stays.length} previous stays, last on ${lastStay[1]}-${lastStay[2]} in ${lastStay[3]}`
-  } else {
-    return 'First time guest';
-  }
-}
-
-async function getMapForDay(page) {
-  let map = new Map();
-  map.set('checkins', []);
-  map.set('checkouts', []);
-  map.set('stayovers', []);
-  for (let type = 1; type < 4; type++) {
-    let row = 3
-    while (true) {
-      const rowElement = await page.$(`#app > div > div.application-body > div > table > tbody:nth-child(${type}) > tr:nth-child(${row})`);
-      if (rowElement === undefined || rowElement === null) {
-        // Reached the end of the available rows
-        break;
-      }
-      const name = await rowElement.$(`td:nth-child(2)`);
-      const link = await rowElement.$(`td.booking-confirmation-id > a`);
-      const room = await rowElement.$(`td:nth-child(4)`);
-      const nights = await rowElement.$(`td:nth-child(5)`);
-      const paid = await rowElement.$(`td:nth-child(6)`);
-      const notes = Array.from(await rowElement.$$(`td:nth-child(7) > div > div`));
-      row++;
-      const entry = {
-        name: cleanName(await getInnerHtml(page, name)),
-        room: cleanRoom(await getInnerHtml(page, room)),
-        nights: cleanNights(await getInnerHtml(page, nights)),
-        amount: cleanPaid(await getInnerHtml(page, paid)),
-        link: await getLink(page, link),
-        notes: await cleanNotes(page, notes)
-      }
-      if (type === 1) {
-        map.get('checkins').push(entry);
-      } else if (type === 2) {
-        map.get('checkouts').push(entry);
-      } else {
-        map.get('stayovers').push(entry);
-      }
-    }
-  }
-  return map;
-}
-
-function createMessages(today, maps, numberOfDays) {
-  const isDayBefore = today.getHours() >= 12;
-  if (isDayBefore) {
-    today.setDate(today.getDate() + 1);
-  }
-  let messages = [];
-  for (let i = 0; i < numberOfDays; i++) {
-    let date = new Date(today);
-    date.setDate(date.getDate() + i);
-    messages.push(getMessageForDay(date, maps[i]));
-  }
-  return messages;
-}
-
-function getMessageForDay(day, map) {
-  const checkins = map.get('checkins');
-  const checkouts = map.get('checkouts');
-  const message = {
-    content: `__**${day.toLocaleString("en", {weekday: "long"})}**__`,
-    embeds: []
-  }
-  if (checkins.length === 0) {
-    const embed = new EmbedBuilder()
-        .setDescription(':inbox_tray: :x:')
-        .setColor(getNextEmbedColor());
-    message.embeds.push(embed);
-  } else {
-    for (const entry of checkins) {
-      const embed = new EmbedBuilder()
-          .setDescription(`:inbox_tray: ${entry.name} :inbox_tray:`)
-          .setFooter({text: entry.previousStays})
-          .addField({name: 'Room', value: entry.room, inline: true})
-          .addField({name: 'Nights', value: entry.nights, inline: true})
-          .setColor(getNextEmbedColor());
-      if (entry.guest) {
-        embed.addField({name: 'Additional Guest Names', value: entry.guest, inline: false});
-      }
-      if (entry.notes) {
-        for (const note of entry.notes) {
-          embed.addField({name: note.name, value: note.value, inline: false});
-        }
-      }
-      if (entry.customerNotes && entry.customerNotes !== '--') {
-        embed.addField({name: 'Customer Notes', value: entry.customerNotes, inline: false});
-      }
-      if (entry.phones) {
-        let phones = '';
-        for (let i = 0; i < entry.phones.length; i++) {
-          if (i > 0) {
-            phones += ', ';
-          }
-          phones += entry.phones[i];
-        }
-        embed.addField({name: 'Phone', value: phones, inline: false});
-      }
-      message.embeds.push(embed);
-    }
-  }
-  if (checkouts.length === 0) {
-    const embed = new EmbedBuilder()
-        .setDescription(':outbox_tray: :x:')
-        .setColor(getNextEmbedColor());
-    message.embeds.push(embed);
-  } else {
-    for (const entry of checkouts) {
-      const embed = new EmbedBuilder()
-          .setDescription(`:outbox_tray: ${entry.name} :outbox_tray:`)
-          .addField({name: 'Room', value: entry.room, inline: true})
-          .addField({name: 'Due', value: entry.amount, inline: true})
-          .setColor(getNextEmbedColor());
-      message.embeds.push(embed);
-    }
-  }
-  return message;
-}
-
-function combineAllPhoneNumbers(map, secrets) {
-  const phoneNumberMap = new Map();
-  const entries = [];
-  for (const entry of map.get('checkins')) {
-    entries.push(entry);
-  }
-  for (const entry of map.get('stayovers')) {
-    entries.push(entry);
-  }
-  for (const entry of entries) {
-    phoneNumberMap.set(secrets.roomNumberMap[entry.room], entry.phones);
-  }
-  return phoneNumberMap;
-}
-
 function cleanPhone(phone) {
   return phone.replace(/\D/g, '');
-}
-
-function cleanName(name) {
-  const nameSansHtml = name.replaceAll(/<[^>]*>/g, ``);
-  const split = nameSansHtml.split(', ');
-  return `${split[1]} ${split[0]}`;
 }
 
 function cleanRoom(room) {
   const split = room.split(' ');
   return split[0];
-}
-
-function cleanNights(nights) {
-  const split = nights.split(' ');
-  return split[2];
-}
-
-function cleanPaid(paid) {
-  if (paid.includes('Yes')) {
-    return '$0.00';
-  } else {
-    const split = paid.split(' ');
-    return split[2];
-  }
-}
-
-async function cleanNotes(page, notes) {
-  const cleanedNotes = [];
-  for (const note of notes) {
-    const innerHtml = await getInnerHtml(page, note);
-    const split = innerHtml.split('</strong>');
-    cleanedNotes.push({
-      name: split[0].replace('<strong>', ''),
-      value: split[1]
-    });
-  }
-  return cleanedNotes;
-}
-
-async function getInnerHtml(page, element) {
-  if (element === null) {
-    return '';
-  }
-  return await page.evaluate(element => element.innerHTML, element);
 }
 
 async function isElementChecked(page, element) {
@@ -648,13 +518,6 @@ async function isElementChecked(page, element) {
   } else {
     return false;
   }
-}
-
-async function getLink(page, element) {
-  if (element === null) {
-    return '';
-  }
-  return await page.evaluate(element => element.href, element);
 }
 
 function getScrapeDate(runConfig) {
@@ -671,4 +534,10 @@ function delay(time) {
   return new Promise(resolve => setTimeout(resolve, time));
 }
 
-export {initialize, runScraper, cleanPhone, cleanName, cleanRoom, cleanNights, cleanPaid, getDateString, combineAllPhoneNumbers}
+export {
+  initialize,
+  runScraper,
+  cleanPhone,
+  cleanRoom,
+  getDateString
+}
