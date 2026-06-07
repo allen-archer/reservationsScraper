@@ -492,10 +492,10 @@ async function buildDiscordMessage(day, checkins, checkouts) {
 
 async function goToSearchPage(page) {
   try {
-    await page.goto(secrets.searchUrl, {waitUntil: 'networkidle0'});
+    await page.goto(secrets.searchUrl, {waitUntil: 'domcontentloaded'});
     await page.waitForSelector('input[name="term"]');
   } catch (e) {
-    await page.screenshot({path: 'screenshots/error_search_page_naviation.png'});
+    await page.screenshot({path: 'screenshots/error_search_page_navigation.png'});
     throw 'Error navigating to search page';
   }
 }
