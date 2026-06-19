@@ -1,6 +1,5 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import {Webhook, EmbedBuilder} from '@tycrek/discord-hookr';
 import * as mqttService from './mqtt.js';
 import {TOTP} from 'totp-generator';
 import {generatePassword, savePassword} from './password.js';
@@ -13,16 +12,6 @@ let config;
 let secrets;
 let logger;
 
-const embedColors = [
-  '#97A88E',
-  '#B2222A',
-  '#EF9D7F',
-  '#027978',
-  '#F9DBA5',
-  '#6E2250',
-  '#332823'
-];
-let embedIndex = 0;
 const frontDeskLinkSelector = '#app > div > div.application-header > div.component.navigation > ul.navigation-links > li:nth-child(1) > a';
 
 async function initialize(_config, _secrets, _logger) {
@@ -322,7 +311,6 @@ async function scrapeGuestData(page, runConfig) {
   await guestDatabase.sendUpsertRequest(confirmationCodeResponses);
   const scrapedResponses = confirmationCodeResponses.filter(r => confirmationCodesSet.has(r.code));
   const baseDate = getScrapeDate(runConfig);
-  const messages = [];
   for (let i = 0; i < config.daysToCheck; i++) {
     const dayDate = new Date(baseDate);
     dayDate.setDate(dayDate.getDate() + (isDayBefore ? i + 1 : i));
@@ -350,20 +338,6 @@ async function scrapeGuestData(page, runConfig) {
         mqttService.publishAttributes('occupancy phone numbers', Object.fromEntries(phoneNumberMap)).then();
       }
     }
-    messages.push(await buildDiscordMessage(dayDate, checkins, checkouts));
-  }
-  if (runConfig?.dryRun) {
-    logger.info('Dry run: skipping Discord webhook send.');
-    for (const message of messages) {
-      logger.info(`Discord message: ${JSON.stringify(message)}`);
-    }
-    return;
-  }
-  for (const message of messages) {
-    const webhook = new Webhook(secrets.scraper.webhook);
-    webhook.setContent(message.content);
-    webhook.addEmbed(message.embeds);
-    await webhook.send();
   }
 }
 
@@ -427,69 +401,6 @@ function buildPhoneNumberMap(checkins, stayovers) {
   return phoneNumberMap;
 }
 
-async function buildDiscordMessage(day, checkins, checkouts) {
-  const message = {
-    content: `__**${day.toLocaleString('en', {weekday: 'long'})}**__`,
-    embeds: []
-  };
-  if (checkins.length === 0) {
-    message.embeds.push(new EmbedBuilder().setDescription(':inbox_tray: :x:').setColor(getNextEmbedColor()));
-  } else {
-    for (const r of checkins) {
-      const data = r.data;
-      const customer = data.customer;
-      const booking = data.bookings?.[0];
-      const room = cleanRoom(booking?.room?.name ?? '');
-      const nights = booking
-          ? Math.round((new Date(booking.endDate) - new Date(booking.startDate)) / 86400000)
-          : '?';
-      const phones = [customer.phone, customer.cellPhone, customer.workPhone]
-          .filter(Boolean).map(cleanPhone).join(', ');
-      let previousStays = 'First time guest';
-      try {
-        const history = await guestDatabase.getGuestHistory(customer.id);
-        if (history.previousStayCount > 0) {
-          const last = history.lastStay;
-          previousStays = `${history.previousStayCount} previous stays, last on ${last.checkIn}-${last.checkOut} in ${last.rooms.map(cleanRoom).join(', ')}`;
-        }
-      } catch (e) {
-        logger.error(`Failed to get guest history for customer ${customer.id}: ${e}`);
-      }
-      const embed = new EmbedBuilder()
-          .setDescription(`:inbox_tray: ${customer.fullName} :inbox_tray:`)
-          .setFooter({text: previousStays})
-          .addField({name: 'Room', value: room, inline: true})
-          .addField({name: 'Nights', value: String(nights), inline: true})
-          .setColor(getNextEmbedColor());
-      if (data.additionalGuestNames) embed.addField({name: 'Additional Guest Names', value: data.additionalGuestNames, inline: false});
-      if (data.arrivalTime) embed.addField({name: 'Arrival Time', value: data.arrivalTime, inline: false});
-      if (data.dietaryRestrictions) embed.addField({name: 'Dietary Restrictions', value: data.dietaryRestrictions, inline: false});
-      if (data.specialAccommodations) embed.addField({name: 'Special Accommodations', value: data.specialAccommodations, inline: false});
-      const getAttr = name => data.attributeValues?.find(a => a.attribute.variableName === name)?.value || null;
-      const housekeepingNotes = getAttr('housekeeping_notes');
-      const reasonForStay = getAttr('reason_for_stay');
-      if (housekeepingNotes) embed.addField({name: 'Housekeeping Notes', value: housekeepingNotes, inline: false});
-      if (reasonForStay) embed.addField({name: 'Reason for Stay', value: reasonForStay, inline: false});
-      if (customer.notes) embed.addField({name: 'Customer Notes', value: customer.notes, inline: false});
-      if (phones) embed.addField({name: 'Phone', value: phones, inline: false});
-      message.embeds.push(embed);
-    }
-  }
-  if (checkouts.length === 0) {
-    message.embeds.push(new EmbedBuilder().setDescription(':outbox_tray: :x:').setColor(getNextEmbedColor()));
-  } else {
-    for (const r of checkouts) {
-      const customer = r.data.customer;
-      const room = cleanRoom(r.data.bookings?.[0]?.room?.name ?? '');
-      message.embeds.push(new EmbedBuilder()
-          .setDescription(`:outbox_tray: ${customer.fullName} :outbox_tray:`)
-          .addField({name: 'Room', value: room, inline: true})
-          .setColor(getNextEmbedColor()));
-    }
-  }
-  return message;
-}
-
 async function goToSearchPage(page) {
   try {
     await page.goto(secrets.searchUrl, {waitUntil: 'domcontentloaded'});
@@ -498,13 +409,6 @@ async function goToSearchPage(page) {
     await page.screenshot({path: 'screenshots/error_search_page_navigation.png'});
     throw 'Error navigating to search page';
   }
-}
-
-function getNextEmbedColor() {
-  if (embedIndex >= embedColors.length) {
-    embedIndex = 0;
-  }
-  return embedColors[embedIndex++];
 }
 
 function cleanPhone(phone) {
