@@ -115,7 +115,7 @@ function basicAuthHeader() {
 }
 
 async function postJson(url, body) {
-  logger.info(`Sending upsert request:\n${JSON.stringify(body)}`);
+  logger.info(`Sending upsert request with ${body.length} stays.`);
   return fetch(url, {
     method: 'POST',
     headers: {

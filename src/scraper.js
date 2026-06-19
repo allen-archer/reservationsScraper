@@ -6,6 +6,8 @@ import {TOTP} from 'totp-generator';
 import {generatePassword, savePassword} from './password.js';
 import {sendScraperErrorNotification} from './ntfy.js'
 import * as guestDatabase from './guestdatabase.js'
+import fs from 'fs';
+import path from 'path';
 
 puppeteer.use(StealthPlugin());
 
@@ -319,6 +321,8 @@ async function scrapeGuestData(page, runConfig) {
       throw `Error searching for confirmation code ${code}. ${confirmationCodeResponses.length} codes searched successfully of ${confirmationCodesSet.size}.`;
     }
   }
+  cleanResponseArchives();
+  saveResponseArchive(confirmationCodeResponses);
   await guestDatabase.sendUpsertRequest(confirmationCodeResponses);
   const scrapedResponses = confirmationCodeResponses.filter(r => confirmationCodesSet.has(r.code));
   const baseDate = getScrapeDate(runConfig);
@@ -488,6 +492,44 @@ async function buildDiscordMessage(day, checkins, checkouts) {
     }
   }
   return message;
+}
+
+function saveResponseArchive(responses) {
+  const directory = config.responseArchive?.directory;
+  if (!directory) {
+    return;
+  }
+  const dateStr = getDateString(new Date());
+  const dayDirectory = path.join(directory, dateStr);
+  fs.mkdirSync(dayDirectory, {recursive: true});
+  for (const response of responses) {
+    fs.writeFileSync(path.join(dayDirectory, `${response.code}.json`), JSON.stringify(response.data, null, 2));
+  }
+  logger.info(`Saved ${responses.length} response(s) to ${dayDirectory}`);
+}
+
+function cleanResponseArchives() {
+  const directory = config.responseArchive?.directory;
+  const daysToKeep = config.responseArchive?.daysToKeep;
+  if (!directory || !daysToKeep) {
+    return;
+  }
+  if (!fs.existsSync(directory)) {
+    return;
+  }
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - daysToKeep);
+  for (const entry of fs.readdirSync(directory)) {
+    const entryPath = path.join(directory, entry);
+    if (!fs.statSync(entryPath).isDirectory()) {
+      continue;
+    }
+    const entryDate = new Date(entry);
+    if (!isNaN(entryDate) && entryDate < cutoff) {
+      fs.rmSync(entryPath, {recursive: true});
+      logger.info(`Deleted old archive: ${entryPath}`);
+    }
+  }
 }
 
 async function goToSearchPage(page) {

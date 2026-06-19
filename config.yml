@@ -1,5 +1,8 @@
 port: 3000
 daysToCheck: 3
+responseArchive:
+  directory: /app/config/responses
+  daysToKeep: 7
 timezone: America/New_York
 timeout: 30000
 cronExpression: '0 22 * * *'
