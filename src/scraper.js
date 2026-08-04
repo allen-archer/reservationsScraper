@@ -197,20 +197,20 @@ async function login(browser) {
       page.waitForNavigation({waitUntil: 'networkidle0'}),
       button.click()
     ]);
-    await page.waitForSelector(`#code, #password-reset, ${frontDeskLinkSelector}`);
+    await page.waitForSelector(`#code, input[name=password_1], ${frontDeskLinkSelector}`);
   } catch (e) {
     await page.screenshot({path: 'screenshots/error_login_otp.png'});
     throw 'Selector for OTP or Front Desk link on Calendar page failed';
   }
-  if (await page.$('#password-reset')) {
+  if (await page.$('input[name=password_1]')) {
     await page.screenshot({path: 'screenshots/password_reset.png'});
     logger.info('Password expired, generating new password and resetting.');
     const newPassword = generatePassword();
     try {
-      await page.waitForSelector('#new-password');
-      await page.type('#new-password', newPassword);
-      await page.type('#re-enter-password', newPassword);
-      const resetButton = await page.$('button[type=submit]');
+      await page.waitForSelector('input[name=password_1]');
+      await page.type('input[name=password_1]', newPassword);
+      await page.type('input[name=password_2]', newPassword);
+      const resetButton = await page.$('.af-nextButton');
       await Promise.all([
         page.waitForNavigation({waitUntil: 'networkidle0'}),
         resetButton.click()
