@@ -167,6 +167,32 @@ function getDateString(date) {
   return `${year}-${month}-${day}`;
 }
 
+async function handlePasswordReset(page) {
+  if (!(await page.$('input[name=password_1]'))) {
+    return false;
+  }
+  await page.screenshot({path: 'screenshots/password_reset.png'});
+  logger.info('Password expired, generating new password and resetting.');
+  const newPassword = generatePassword();
+  try {
+    await page.type('input[name=password_1]', newPassword);
+    await page.type('input[name=password_2]', newPassword);
+    const resetButton = await page.$('.af-nextButton');
+    await Promise.all([
+      page.waitForNavigation({waitUntil: 'networkidle0'}),
+      resetButton.click()
+    ]);
+    await page.waitForSelector(`#code, ${frontDeskLinkSelector}`);
+    sendScraperErrorNotification(`New password generated: ${newPassword}`);
+  } catch (e) {
+    await page.screenshot({path: 'screenshots/error_password_reset.png'});
+    throw 'Password reset failed';
+  }
+  savePassword(newPassword, secrets);
+  logger.info('Password reset and saved to secrets.');
+  return true;
+}
+
 async function login(browser) {
   const pages = await browser.pages();
   const page = pages.length > 0 ? pages[0] : await browser.newPage();
@@ -202,28 +228,7 @@ async function login(browser) {
     await page.screenshot({path: 'screenshots/error_login_otp.png'});
     throw 'Selector for OTP or Front Desk link on Calendar page failed';
   }
-  if (await page.$('input[name=password_1]')) {
-    await page.screenshot({path: 'screenshots/password_reset.png'});
-    logger.info('Password expired, generating new password and resetting.');
-    const newPassword = generatePassword();
-    try {
-      await page.waitForSelector('input[name=password_1]');
-      await page.type('input[name=password_1]', newPassword);
-      await page.type('input[name=password_2]', newPassword);
-      const resetButton = await page.$('.af-nextButton');
-      await Promise.all([
-        page.waitForNavigation({waitUntil: 'networkidle0'}),
-        resetButton.click()
-      ]);
-      await page.waitForSelector(`#code, ${frontDeskLinkSelector}`);
-      sendScraperErrorNotification(`New password generated: ${newPassword}`);
-    } catch (e) {
-      await page.screenshot({path: 'screenshots/error_password_reset.png'});
-      throw 'Password reset failed';
-    }
-    savePassword(newPassword, secrets);
-    logger.info('Password reset and saved to secrets.');
-  }
+  await handlePasswordReset(page);
   const codeInput = await page.$('#code');
   if (codeInput) {
     const {otp, expires} = await TOTP.generate(secrets.totp.secret);
@@ -257,6 +262,9 @@ async function scrapeGuestData(page, runConfig) {
   try {
     const frontDeskUrl = await page.$eval(frontDeskLinkSelector, el => el.href);
     await page.goto(frontDeskUrl, {waitUntil: 'networkidle0'});
+    if (await handlePasswordReset(page)) {
+      await page.goto(frontDeskUrl, {waitUntil: 'networkidle0'});
+    }
     await page.waitForSelector('#app > div > div.application-body > div > table > tbody:nth-child(1) > tr:nth-child(1) > th > h2');
   } catch (e) {
     await page.screenshot({path: 'screenshots/error_front_desk_nav.png'});
