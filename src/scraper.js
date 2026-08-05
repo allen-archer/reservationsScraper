@@ -91,7 +91,10 @@ async function doRun(browser, runConfig) {
 async function doBlackouts(page, runConfig) {
   logger.info('Starting blackouts.');
   const rooms = secrets.blackouts.roomNames;
-  await page.goto(secrets.blackouts.url);
+  await page.goto(secrets.blackouts.url, {waitUntil: 'networkidle0'});
+  if (await handlePasswordReset(page)) {
+    await page.goto(secrets.blackouts.url, {waitUntil: 'networkidle0'});
+  }
   await page.waitForSelector('[class="blackout-room-id-date"]');
   const date = getScrapeDate(runConfig);
   let doCheck = true;
