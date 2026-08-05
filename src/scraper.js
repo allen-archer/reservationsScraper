@@ -72,12 +72,14 @@ async function doRun(browser, runConfig) {
   } catch (e) {
     throw e;
   }
+  const errors = [];
   try {
     if (runConfig?.doBlackouts) {
       await doBlackouts(page, runConfig);
     }
   } catch (e) {
     logger.error(e);
+    errors.push(e);
   }
   try {
     if (runConfig?.doScrapeGuestData) {
@@ -85,6 +87,10 @@ async function doRun(browser, runConfig) {
     }
   } catch (e) {
     logger.error(e);
+    errors.push(e);
+  }
+  if (errors.length > 0) {
+    throw errors[0];
   }
 }
 
@@ -185,7 +191,6 @@ async function handlePasswordReset(page) {
       page.waitForNavigation({waitUntil: 'networkidle0'}),
       resetButton.click()
     ]);
-    await page.waitForSelector(`#code, ${frontDeskLinkSelector}`);
     sendScraperErrorNotification(`New password generated: ${newPassword}`);
   } catch (e) {
     await page.screenshot({path: 'screenshots/error_password_reset.png'});
