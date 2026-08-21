@@ -355,12 +355,14 @@ async function scrapeGuestData(page, runConfig) {
       const areBreakfastGuests = stayovers.length > 0 || checkouts.length > 0;
       const occupancyMap = buildOccupancyMap(checkins, stayovers, dateString);
       const phoneNumberMap = buildPhoneNumberMap(checkins, stayovers);
+      const automatedDoorCodes = buildAutomatedDoorCodes(checkins, stayovers)
       if (runConfig?.dryRun) {
         logger.info('Dry run: skipping MQTT send.');
         logger.info(`evening guests: ${areEveningGuests}`);
         logger.info(`breakfast guests: ${areBreakfastGuests}`);
         logger.info(`occupancy:\n${[...occupancyMap.entries()].map(([k, v]) => ` -- ${k}:${JSON.stringify(v)}`).join('\n')}`);
         logger.info(`phones:\n${[...phoneNumberMap.entries()].map(([k, v]) => ` -- ${k}:${JSON.stringify(v)}`).join('\n')}`);
+        logger.info(`automatedDoorCodes:\n${automatedDoorCodes.map(c => ` -- ${JSON.stringify(c)}`).join('\n')}`);
       } else {
         mqttService.changeDeviceState('evening guests', areEveningGuests).then();
         mqttService.changeDeviceState('breakfast guests', areBreakfastGuests).then();
@@ -368,6 +370,7 @@ async function scrapeGuestData(page, runConfig) {
           mqttService.publishAttributes('occupancy ' + key, occupancyMap.get(key)).then();
         }
         mqttService.publishAttributes('occupancy phone numbers', Object.fromEntries(phoneNumberMap)).then();
+        mqttService.publishAttributes('automated door codes', automatedDoorCodes).then();
       }
     }
     messages.push(await buildDiscordMessage(dayDate, checkins, checkouts));
@@ -445,6 +448,41 @@ function buildPhoneNumberMap(checkins, stayovers) {
     }
   }
   return phoneNumberMap;
+}
+
+function buildAutomatedDoorCodes(checkins, stayovers) {
+  const devices = config.automatedDoorCodes.devices;
+  const automatedDoorCodes = [];
+  try {
+    for (const r of [...checkins, ...stayovers]) {
+      const customer = r.data.customer;
+      const guestName = customer.fullName;
+      const booking = r.data.bookings[0];
+      const roomName = booking.room.name;
+      const startDate = new Date(booking.startDate);
+      startDate.setHours(config.automatedDoorCodes.start.hour, config.automatedDoorCodes.start.minute, 0, 0);
+      const expirationDate = new Date(booking.endDate);
+      expirationDate.setHours(config.automatedDoorCodes.expiration.hour, config.automatedDoorCodes.expiration.minute, 0, 0);
+      const description = `${roomName} - ${guestName}`
+      const codes = [customer.phone, customer.cellPhone, customer.workPhone].filter(Boolean).map(cleanPhone).map(phone => phone.slice(-4))
+      for (const code of codes) {
+        for (const device of devices) {
+          automatedDoorCodes.push(
+              {
+                device: device,
+                code: code,
+                description: description,
+                startDate: startDate,
+                expirationDate: expirationDate
+              }
+          )
+        }
+      }
+    }
+  } catch (e) {
+    logger.error(`Error building automated door codes: ${e}`);
+  }
+  return automatedDoorCodes;
 }
 
 async function buildDiscordMessage(day, checkins, checkouts) {

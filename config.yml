@@ -13,3 +13,12 @@ ntfy:
     tags: computer,rotating_light
     priority: 5
     title: Scraper Error
+automatedDoorCodes:
+  devices:
+    - front
+  start:
+    hour: 12
+    minute: 0
+  expiration:
+    hour: 12
+    minute: 0
