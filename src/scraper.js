@@ -458,12 +458,12 @@ function buildAutomatedDoorCodes(checkins, stayovers) {
       const customer = r.data.customer;
       const guestName = customer.fullName;
       const booking = r.data.bookings[0];
-      const roomName = booking.room.name;
+      const roomName = booking.room.name.replace(/\s*suite/i, '');
       const startDate = new Date(booking.startDate);
       startDate.setHours(config.automatedDoorCodes.start.hour, config.automatedDoorCodes.start.minute, 0, 0);
       const expirationDate = new Date(booking.endDate);
       expirationDate.setHours(config.automatedDoorCodes.expiration.hour, config.automatedDoorCodes.expiration.minute, 0, 0);
-      const description = `${roomName} - ${guestName}`
+      const description = `${guestName} - ${roomName}`
       const codes = [customer.phone, customer.cellPhone, customer.workPhone].filter(Boolean).map(cleanPhone).map(phone => phone.slice(-4))
       for (const code of codes) {
         for (const device of devices) {
