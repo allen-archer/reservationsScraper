@@ -350,12 +350,13 @@ async function scrapeGuestData(page, runConfig) {
     const checkins = classifyForDay(scrapedResponses, dateString, 'checkin');
     const checkouts = classifyForDay(scrapedResponses, dateString, 'checkout');
     const stayovers = classifyForDay(scrapedResponses, dateString, 'stayover');
+    const staysInWindow = classifyForDay(scrapedResponses, dateString, 'window')
     if (i === 0) {
       const areEveningGuests = checkins.length > 0 || stayovers.length > 0;
       const areBreakfastGuests = stayovers.length > 0 || checkouts.length > 0;
       const occupancyMap = buildOccupancyMap(checkins, stayovers, dateString);
       const phoneNumberMap = buildPhoneNumberMap(checkins, stayovers);
-      const automatedDoorCodes = buildAutomatedDoorCodes(checkins, stayovers)
+      const automatedDoorCodes = buildAutomatedDoorCodes(staysInWindow);
       if (runConfig?.dryRun) {
         logger.info('Dry run: skipping MQTT send.');
         logger.info(`evening guests: ${areEveningGuests}`);
@@ -397,6 +398,12 @@ function classifyForDay(responses, dateString, type) {
     if (type === 'checkin') return bookings.some(b => b.startDate === dateString);
     if (type === 'checkout') return bookings.some(b => b.endDate === dateString);
     if (type === 'stayover') return bookings.some(b => b.startDate < dateString && b.endDate > dateString);
+    if (type === 'window') {
+      const windowEnd = new Date(dateString);
+      windowEnd.setDate(windowEnd.getDate() + config.daysToCheck);
+      const windowEndString = getDateString(windowEnd);
+      return bookings.some(b => b.startDate < windowEndString && b.endDate > dateString);
+    }
   });
 }
 
@@ -450,14 +457,14 @@ function buildPhoneNumberMap(checkins, stayovers) {
   return phoneNumberMap;
 }
 
-function buildAutomatedDoorCodes(checkins, stayovers) {
+function buildAutomatedDoorCodes(stays) {
   const devices = config.automatedDoorCodes.devices;
   const automatedDoorCodes = [];
   try {
-    for (const r of [...checkins, ...stayovers]) {
-      const customer = r.data.customer;
+    for (const stay of stays) {
+      const customer = stay.data.customer;
       const guestName = customer.fullName;
-      const booking = r.data.bookings[0];
+      const booking = stay.data.bookings[0];
       const roomName = booking.room.name.replace(/\s*suite/i, '');
       const startDate = new Date(booking.startDate);
       startDate.setHours(config.automatedDoorCodes.start.hour, config.automatedDoorCodes.start.minute, 0, 0);
